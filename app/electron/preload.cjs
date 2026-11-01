@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('kc', {
   reveal: (p) => ipcRenderer.invoke('reveal', p),
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   setCleaning: (on) => ipcRenderer.send('cleaning', !!on),
+  setTheme: (t) => ipcRenderer.send('theme', String(t)),
+  appVersion: () => ipcRenderer.invoke('app-version'),
 });

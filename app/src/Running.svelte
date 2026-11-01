@@ -1,0 +1,80 @@
+<script>
+  // Superposition pendant le nettoyage : octets libérés, progression, règles traitées une à une.
+  import { untrack } from 'svelte';
+  import { fade, fly } from 'svelte/transition';
+  import { S } from './lib/state.svelte.js';
+  import { fmt } from './lib/fmt.js';
+  import Icon from './lib/Icon.svelte';
+  import Num from './lib/ui/Num.svelte';
+
+  const rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dur = (ms) => (rm ? 0 : ms);
+  // snapshot: the selection stays valid during the clean, but a fresh scan follows right after
+  const steps = untrack(() => S.picked.map((r) => ({ id: r.id, title: r.title, size: S.selSize(r), sizeKnown: r.sizeKnown, needsAdmin: r.needsAdmin })));
+  const done = $derived(S.progress?.phase === 'clean' ? S.progress.done : 0);
+  const total = $derived(S.progress?.total ?? steps.length);
+  const measuring = $derived(done >= total && total > 0);
+  const status = (i) => (i < done ? 'done' : i === done ? 'current' : 'pending');
+  /** keeps the active row in view (re-runs when `done` moves) */
+  const follow = (i) => (el) => { if (status(i) === 'current') el.scrollIntoView({ block: 'nearest', behavior: rm ? 'auto' : 'smooth' }); };
+</script>
+
+<div class="kc-run" transition:fade={{ duration: dur(200) }}>
+  <div class="kc-run__card k-card k-card--shadow" role="status" aria-live="polite" in:fly={{ y: 12, duration: dur(300) }}>
+    <div class="kc-run__hero">
+      <span class="kc-run__icon"><Icon name="broom-sparkles" /></span>
+      <p class="kc-num-hero"><Num value={S.progress?.freed ?? 0} duration={900} /><span class="kc-num-hero__unit">libérés</span></p>
+    </div>
+    <div class="k-progress-row kc-run__bar">
+      <span class="k-progress-row__label k-shimmer k-shimmer--strong">{measuring ? 'Mesure du disque' : S.progress?.label ?? 'Préparation'}…</span>
+      <div class="k-progress" role="progressbar" aria-label="Progression du nettoyage" aria-valuemin="0" aria-valuemax="100" aria-valuenow={total ? Math.round((done / total) * 100) : 0}
+        style:--k-progress={total ? done / total : 0}><div class="k-progress__bar"></div></div>
+      <span class="k-progress-row__value">{Math.min(done, total)}/{total}</span>
+    </div>
+    <ol class="k-timeline kc-run__steps">
+      {#each steps as s, i (s.id)}
+        <li class="k-timeline__item" class:k-timeline__item--current={status(i) === 'current'} data-status={status(i)} {@attach follow(i)}>
+          <span class="k-timeline__time kc-run__size">{s.sizeKnown ? fmt(s.size) : '—'}</span>
+          <span class="k-timeline__rail" aria-hidden="true"><span class="k-timeline__dot"></span></span>
+          <div class="k-timeline__content">
+            <div class="kc-run__title">
+              {#if status(i) === 'done'}<Icon name="check" />{:else if status(i) === 'current'}<span class="k-dot-pulse" style="--k-dot-size: 6px; --k-dot-color: var(--accent)"></span>{/if}
+              <span class={status(i) === 'current' ? 'k-shimmer k-shimmer--strong' : ''}>{s.title}</span>
+              {#if s.needsAdmin}<span class="k-badge"><Icon name="shield" />Admin</span>{/if}
+            </div>
+          </div>
+        </li>
+      {/each}
+      <li class="k-timeline__item" class:k-timeline__item--current={measuring} data-status={measuring ? 'current' : 'pending'} {@attach follow(steps.length)}>
+        <span class="k-timeline__time kc-run__size"></span>
+        <span class="k-timeline__rail" aria-hidden="true"><span class="k-timeline__dot"></span></span>
+        <div class="k-timeline__content"><div class="kc-run__title">{#if measuring}<span class="k-dot-pulse" style="--k-dot-size: 6px; --k-dot-color: var(--accent)"></span>{/if}<span class={measuring ? 'k-shimmer k-shimmer--strong' : ''}>Mesure du disque</span></div></div>
+      </li>
+    </ol>
+    <p class="kc-run__note"><Icon name="info" />Les fichiers ouverts ou modifiés depuis l’analyse sont laissés en place.</p>
+    <p class="kc-run__note kc-run__note--strong"><Icon name="triangle-alert" />Ne ferme pas l’application pendant le nettoyage.</p>
+  </div>
+</div>
+
+<style>
+  .kc-run { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: var(--space-6); background: var(--scrim-dim); -webkit-backdrop-filter: blur(var(--blur-xs)); backdrop-filter: blur(var(--blur-xs)); }
+  .kc-run__card { width: min(30rem, 100%); max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-6) var(--space-6) var(--space-5); }
+  .kc-run__hero { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; }
+  .kc-run__hero .kc-num-hero { margin: 0; }
+  .kc-run__icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--radius-xl); background: var(--accent-subtle); color: var(--accent); }
+  .kc-run__icon :global(.k-icon) { --k-icon-size: 24px; }
+  .kc-run__steps { --k-timeline-time: 56px; margin: 0; padding: 0; list-style: none; max-height: 36vh; overflow-y: auto; overscroll-behavior: contain; }
+  .kc-run__steps .k-timeline__content { padding-top: 9px; padding-bottom: 9px; }
+  .kc-run__size { padding-top: 11px; text-align: end; }
+  .kc-run__title { display: flex; align-items: center; gap: var(--space-2); min-height: 20px; font-size: 13px; line-height: 20px; color: var(--ink-secondary); }
+  .kc-run__title :global(.k-icon) { --k-icon-size: 14px; color: var(--success); }
+  .kc-run__title :global(.k-badge .k-icon) { color: inherit; }
+  [data-status='current'] .kc-run__title { color: var(--ink); font-weight: 500; }
+  [data-status='pending'] .kc-run__title { color: var(--ink-tertiary); }
+  [data-status='pending'] .k-timeline__dot { background: none; box-shadow: inset 0 0 0 1px var(--ink-tertiary); }
+  .kc-run__note { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+  .kc-run__note :global(.k-icon) { --k-icon-size: 14px; flex: none; margin-top: 1px; color: var(--ink-tertiary); }
+  .kc-run__note--strong { color: var(--ink); }
+  .kc-run__note--strong :global(.k-icon) { color: var(--warning); }
+  .kc-run__note + .kc-run__note { margin-top: calc(-1 * var(--space-2)); }
+</style>

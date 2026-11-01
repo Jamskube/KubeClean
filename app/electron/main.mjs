@@ -26,7 +26,10 @@ const pending = new Map();
 let nextId = 0;
 
 function startCore() {
-  const p = spawn(CORE, ['--data-dir', app.getPath('userData')], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true });
+  // KC_MOCK=1: fake core for UI work (scripts/mock-core.mjs), touches no file
+  const p = process.env.KC_MOCK
+    ? spawn(process.execPath, [path.join(here, '..', 'scripts', 'mock-core.mjs')], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } })
+    : spawn(CORE, ['--data-dir', app.getPath('userData')], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true });
   readline.createInterface({ input: p.stdout }).on('line', (line) => {
     let m;
     try { m = JSON.parse(line); } catch { return; }
@@ -67,6 +70,9 @@ ipcMain.handle('core', (e, method, params) => {
 ipcMain.handle('reveal', (e, p) => {
   if (fromApp(e) && isAbs(p) && fs.existsSync(p)) shell.showItemInFolder(p);
 });
+// unpackaged, app.getVersion() is Electron's own version: read ours from package.json
+const APP_VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
+ipcMain.handle('app-version', () => APP_VERSION);
 ipcMain.handle('pick-folder', async (e) => {
   if (!fromApp(e)) return null;
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Dossier de projets' });
@@ -82,6 +88,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200, height: 800, minWidth: 880, minHeight: 560,
     title: 'KubeClean',
+    icon: path.join(here, '..', 'public', 'icon.png'),
     backgroundColor: overlay().color,
     titleBarStyle: 'hidden',
     titleBarOverlay: overlay(),
@@ -112,6 +119,8 @@ function createWindow() {
 
 let cleaning = false;
 ipcMain.on('cleaning', (e, on) => { if (fromApp(e)) cleaning = !!on; });
+// the page owns the theme choice; the native window buttons follow it
+ipcMain.on('theme', (e, t) => { if (fromApp(e) && ['system', 'light', 'dark'].includes(t)) nativeTheme.themeSource = t; });
 
 app.whenReady().then(() => {
   protocol.handle('app', (req) => {

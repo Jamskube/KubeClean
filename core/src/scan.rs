@@ -428,7 +428,8 @@ pub fn summarize(s: &RuleScan, running: &[String]) -> RuleSummary {
     }
 }
 
-pub fn scan_all(set: &RuleSet, settings: &Settings, cancel: &AtomicBool, progress: &(dyn Fn(usize, usize, &str) + Sync)) -> Vec<RuleScan> {
+/// `on_rule(done, total, scan)` fires as each rule finishes, so the UI can reveal results live.
+pub fn scan_all(set: &RuleSet, settings: &Settings, cancel: &AtomicBool, on_rule: &(dyn Fn(usize, usize, &RuleScan) + Sync)) -> Vec<RuleScan> {
     let cx = Ctx { settings, global_exclude: Mask::from_list(&set.global_exclude), now: now_ms(), cancel };
     let done = AtomicUsize::new(0);
     let total = set.rules.len();
@@ -436,7 +437,7 @@ pub fn scan_all(set: &RuleSet, settings: &Settings, cancel: &AtomicBool, progres
         .par_iter()
         .map(|r| {
             let s = scan_rule(r, &cx);
-            progress(done.fetch_add(1, Ordering::Relaxed) + 1, total, &r.title);
+            on_rule(done.fetch_add(1, Ordering::Relaxed) + 1, total, &s);
             s
         })
         .collect()

@@ -86,7 +86,7 @@ pub fn clean(
     settings: &Settings,
     data_dir: Option<&Path>,
     cancel: &AtomicBool,
-    progress: &dyn Fn(usize, usize, &str),
+    progress: &dyn Fn(usize, usize, &str, u64), // (done, total, label, bytes freed so far)
 ) -> CleanReport {
     let before = total_free();
     let mut rep = CleanReport::default();
@@ -94,7 +94,7 @@ pub fn clean(
     let total = picks.len();
     for (n, p) in picks.iter().enumerate() {
         let Some(s) = scans.iter().find(|s| s.rule.id == p.rule) else { continue };
-        progress(n, total, &s.rule.title);
+        progress(n, total, &s.rule.title, rep.freed);
         let mut st = DelStats::default();
         match s.rule.kind {
             Kind::Elevated => {
@@ -155,7 +155,7 @@ pub fn clean(
         rep.by_rule.insert(s.rule.id.clone(), st);
     }
     if !tasks.is_empty() {
-        progress(total, total, "Nettoyage système (admin)");
+        progress(total, total, "Nettoyage système (admin)", rep.freed);
         run_elevated(&tasks, data_dir, &mut rep);
     }
     rep.disk_gain = total_free() as i64 - before as i64;
@@ -293,7 +293,7 @@ mod tests {
         let s = scan_rule(&r, &future_ctx(&settings, &cancel));
         assert_eq!(names(&s), ["old.log", "ro.log"], "tmp excluded, skipme excluded, junction not followed");
 
-        let rep = clean(&[s], &[all("t")], &settings, None, &cancel, &|_, _, _| {});
+        let rep = clean(&[s], &[all("t")], &settings, None, &cancel, &|_, _, _, _| {});
         assert_eq!(rep.deleted, 2, "read-only file deleted too");
         assert_eq!(rep.freed, 3 + 8, "freed = measured bytes actually unlinked");
         assert!(outside.join("keep.txt").exists(), "junction target survives");
@@ -320,7 +320,7 @@ mod tests {
         f.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(60 * 86_400)).unwrap();
         drop(f);
 
-        let rep = clean(&[s], &[all("c")], &settings, None, &cancel, &|_, _, _| {});
+        let rep = clean(&[s], &[all("c")], &settings, None, &cancel, &|_, _, _, _| {});
         assert!(!root.join("s1").exists());
         assert!(root.join("s2").join("live.txt").exists(), "re-activated folder skipped");
         assert_eq!(rep.skipped, 1);
@@ -354,7 +354,7 @@ mod tests {
         s.items.push(crate::scan::Item { path: t.path().join("victim.txt"), size: 1, newest: 0, is_dir: false, label: None, idle_days: None, default: true });
         // the user ignores b.log between the scan and the clean
         let later = Settings { ignore: vec![root.join("b.log").to_string_lossy().to_string()], ..Default::default() };
-        let rep = clean(&[s], &[all("t")], &later, None, &cancel, &|_, _, _| {});
+        let rep = clean(&[s], &[all("t")], &later, None, &cancel, &|_, _, _, _| {});
         assert_eq!(rep.deleted, 1);
         assert!(!root.join("a.log").exists());
         assert!(root.join("b.log").exists(), "ignored after the scan: kept");
@@ -372,11 +372,11 @@ mod tests {
         let (settings, cancel) = (Settings::default(), AtomicBool::new(false));
         let s = scan_rule(&r, &future_ctx(&settings, &cancel));
         assert_eq!(s.items[0].size, 10, "items sorted biggest first: indices are stable");
-        let rep = clean(&[s.clone()], &[Pick { rule: "t".into(), all: true, except: vec![0], only: vec![] }], &settings, None, &cancel, &|_, _, _| {});
+        let rep = clean(&[s.clone()], &[Pick { rule: "t".into(), all: true, except: vec![0], only: vec![] }], &settings, None, &cancel, &|_, _, _, _| {});
         assert_eq!(rep.deleted, 2);
         assert!(root.join("big.log").exists());
         let s2 = scan_rule(&r, &future_ctx(&settings, &cancel));
-        clean(&[s2], &[Pick { rule: "t".into(), all: false, except: vec![], only: vec![] }], &settings, None, &cancel, &|_, _, _| {});
+        clean(&[s2], &[Pick { rule: "t".into(), all: false, except: vec![], only: vec![] }], &settings, None, &cancel, &|_, _, _, _| {});
         assert!(root.join("big.log").exists(), "only:[] with all:false deletes nothing");
     }
 
@@ -407,7 +407,7 @@ mod tests {
 
         // marker removed after the scan: no longer a build folder, keep it
         fs::remove_file(p.join("rs").join("Cargo.toml")).unwrap();
-        let rep = clean(&[s], &[all("projects")], &settings, None, &cancel, &|_, _, _| {});
+        let rep = clean(&[s], &[all("projects")], &settings, None, &cancel, &|_, _, _, _| {});
         assert!(p.join("rs").join("target").exists());
         assert!(!p.join("web").join("node_modules").exists());
         assert_eq!(rep.skipped, 1);

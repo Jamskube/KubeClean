@@ -76,8 +76,11 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             let set = rules::RuleSet::load(c.data_dir())?;
             let settings = c.store.settings();
             let running = win::running_processes();
-            let progress = |done: usize, total: usize, label: &str| c.event("progress", json!({ "phase": "scan", "done": done, "total": total, "label": label }));
-            let scans = scan::scan_all(&set, &settings, &c.cancel, &progress);
+            let on_rule = |done: usize, total: usize, s: &scan::RuleScan| {
+                c.event("progress", json!({ "phase": "scan", "done": done, "total": total, "label": s.rule.title }));
+                c.event("rule", json!(scan::summarize(s, &running))); // live reveal, same shape as the final list
+            };
+            let scans = scan::scan_all(&set, &settings, &c.cancel, &on_rule);
             if c.cancel.load(Ordering::SeqCst) {
                 return Err("analyse annulée".into());
             }
@@ -106,7 +109,7 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
                 return Err("aucune analyse récente : relance une analyse".into());
             }
             let settings = c.store.settings();
-            let progress = |done: usize, total: usize, label: &str| c.event("progress", json!({ "phase": "clean", "done": done, "total": total, "label": label }));
+            let progress = |done: usize, total: usize, label: &str, freed: u64| c.event("progress", json!({ "phase": "clean", "done": done, "total": total, "label": label, "freed": freed }));
             let rep = clean::clean(&scans, &p.picks, &settings, c.data_dir(), &c.cancel, &progress);
             let _ = c.store.push_history(clean::history_entry(&rep, &scans));
             Ok(json!(rep))

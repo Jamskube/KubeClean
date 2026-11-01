@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KubeClean</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="kube/kube.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { overflow: hidden; }
+  .kc-section { margin: 0 0 40px; scroll-margin-top: 24px; }
+  .kc-section__head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 4px; }
+  .kc-section__title { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink); }
+  .kc-section__total { margin-left: auto; color: var(--ink-secondary); font-variant-numeric: tabular-nums; font-size: 14px; }
+  .kc-check { width: 18px; }
+  .kc-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .kc-name__title { color: var(--ink); }
+  .kc-name__hint { color: var(--ink-secondary); font-size: 13px; overflow-wrap: anywhere; }
+  .kc-disk { margin: 8px 0 28px; }
+  .kc-empty { color: var(--ink-tertiary); font-size: 13px; margin: 8px 0 0; }
+  .kc-status { min-height: 20px; margin: 0 0 16px; }
+  .kc-status[hidden] { display: none; }
+  .kc-dialog-list { margin: 0; padding: 0 0 0 18px; color: var(--ink-secondary); font-size: 14px; max-height: 240px; overflow: auto; }
+  .k-table td { vertical-align: top; }
+</style>
+</head>
+<body class="k-root">
+<div class="k-app" id="app">
+  <div class="k-app__body">
+    <nav class="k-sidebar" id="sidebar" data-kube="sidebar" data-kube-key="kubeclean:sidebar-width" data-state="open" aria-label="Catégories">
+      <div class="k-sidebar__inner" data-kube="nav-list">
+        <div class="k-sidebar__header">
+          <a class="k-nav-row" href="#top" aria-current="page">
+            <span class="k-nav-row__icon"><svg class="k-icon" aria-hidden="true"><use href="kube/icons/kube-icons.svg#broom-sparkles"></use></svg></span>
+            <span class="k-nav-row__label">Vue d'ensemble</span>
+          </a>
+        </div>
+        <div class="k-sidebar__scroll">
+          <section class="k-nav-section" data-kube="nav-section">
+            <div class="k-nav-section__title">
+              <button class="k-nav-section__toggle" type="button" aria-expanded="true"><span class="k-nav-section__label">Catégories</span></button>
+            </div>
+            <div class="k-nav-section__body"><div class="k-nav-list" id="nav"></div></div>
+          </section>
+        </div>
+        <div class="k-sidebar__footer">
+          <span class="k-nav-row k-nav-row--footer" id="diskRow">
+            <span class="k-nav-row__icon"><svg class="k-icon" aria-hidden="true"><use href="kube/icons/kube-icons.svg#hard-drive"></use></svg></span>
+            <span class="k-nav-row__label" id="diskLabel">Disque C:</span>
+          </span>
+        </div>
+      </div>
+      <div class="k-resizer k-resizer--end" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Redimensionner la barre latérale"></div>
+    </nav>
+    <main class="k-app__main">
+      <div class="k-pane">
+        <div class="k-pane__scroll" id="scroller">
+          <div class="k-pane__column" id="top">
+            <header class="k-page-header k-page-header--sticky" data-kube="page-header">
+              <div class="k-page-header__content">
+                <div class="k-page-header__heading">
+                  <h1 class="k-page-header__title">Nettoyage</h1>
+                  <p class="k-page-header__subtitle" id="subtitle">Lance une analyse pour voir ce qui peut partir.</p>
+                </div>
+                <div class="k-page-header__actions">
+                  <button class="k-btn k-btn--outline" type="button" id="scanBtn" data-kube="press">
+                    <svg class="k-icon" aria-hidden="true"><use href="kube/icons/kube-icons.svg#scan-search"></use></svg>Analyser
+                  </button>
+                  <button class="k-btn k-btn--primary" type="button" id="cleanBtn" data-kube="press" disabled>
+                    <svg class="k-icon" aria-hidden="true"><use href="kube/icons/kube-icons.svg#trash"></use></svg><span id="cleanLabel">Nettoyer</span>
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            <div class="kc-disk">
+              <div class="k-progress-row">
+                <span class="k-progress-row__label" id="diskText">C:</span>
+                <div class="k-progress" id="diskBar" role="progressbar" aria-label="Espace utilisé sur C:" aria-valuemin="0" aria-valuemax="100" style="--k-progress: 0"><div class="k-progress__bar"></div></div>
+                <span class="k-progress-row__value" id="diskPct"></span>
+              </div>
+            </div>
+
+            <div class="kc-status" id="status" hidden>
+              <div class="k-progress-row">
+                <span class="k-progress-row__label" id="statusLabel">Analyse…</span>
+                <div class="k-progress" id="statusBar" role="progressbar" aria-label="Progression de l'analyse" aria-valuemin="0" aria-valuemax="100" style="--k-progress: 0"><div class="k-progress__bar"></div></div>
+                <span class="k-progress-row__value" id="statusPct"></span>
+              </div>
+            </div>
+
+            <div id="content"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<dialog class="k-dialog" id="confirm" aria-labelledby="confirm-title">
+  <div class="k-dialog__body">
+    <div class="k-dialog__header">
+      <span class="k-dialog__icon"><svg class="k-icon" aria-hidden="true"><use href="kube/icons/kube-icons.svg#trash"></use></svg></span>
+      <div class="k-dialog__heading">
+        <h2 class="k-dialog__title" id="confirm-title">Nettoyer la sélection ?</h2>
+        <p class="k-dialog__description" id="confirmDesc"></p>
+      </div>
+    </div>
+    <div class="k-dialog__section"><ul class="kc-dialog-list" id="confirmList"></ul></div>
+    <div class="k-dialog__actions">
+      <button class="k-btn" type="button" value="cancel" id="confirmCancel">Annuler</button>
+      <button class="k-btn k-btn--danger-solid" type="button" id="confirmOk">Supprimer</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="kube/kube.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>

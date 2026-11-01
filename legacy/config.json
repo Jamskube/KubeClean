@@ -1,0 +1,12 @@
+{
+  "projectRoots": [
+    "%USERPROFILE%/Desktop",
+    "%USERPROFILE%/Documents",
+    "%USERPROFILE%/PycharmProjects",
+    "%USERPROFILE%/PyCharmMiscProject",
+    "%USERPROFILE%/source",
+    "%USERPROFILE%/Projects"
+  ],
+  "projectIdleDays": 14,
+  "maxDepth": 8
+}

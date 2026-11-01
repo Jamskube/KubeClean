@@ -1,0 +1,52 @@
+{
+  "name": "kubeclean",
+  "productName": "KubeClean",
+  "version": "2.0.0",
+  "description": "Nettoyeur de disque pour Windows : cœur Rust, interface Electron + Svelte avec le kit Kube.",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "postinstall": "install-electron",
+    "core": "cargo build --release --manifest-path ../core/Cargo.toml",
+    "build": "vite build",
+    "check": "svelte-check",
+    "start": "npm run core && vite build && electron .",
+    "dist": "npm run core && vite build && electron-builder --win --arm64"
+  },
+  "build": {
+    "appId": "be.bboffices.kubeclean",
+    "productName": "KubeClean",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**",
+      "dist/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../core/target/release/kubeclean-core.exe",
+        "to": "kubeclean-core.exe"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "electron": "44.9.3",
+    "electron-builder": "26.17.0",
+    "svelte": "5.57.2",
+    "svelte-check": "4.7.7",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
+  }
+}

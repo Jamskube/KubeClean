@@ -1,0 +1,16 @@
+// Sandboxed preload: the page gets exactly these functions, nothing else.
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('kc', {
+  async call(method, params) {
+    const r = await ipcRenderer.invoke('core', method, params);
+    if (r.error !== undefined) throw new Error(r.error);
+    return r.result;
+  },
+  onEvent(fn) {
+    ipcRenderer.on('core-event', (_e, m) => fn(m));
+  },
+  reveal: (p) => ipcRenderer.invoke('reveal', p),
+  pickFolder: () => ipcRenderer.invoke('pick-folder'),
+  setCleaning: (on) => ipcRenderer.send('cleaning', !!on),
+});

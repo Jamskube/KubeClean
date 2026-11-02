@@ -3,7 +3,7 @@
   import { flip } from 'svelte/animate';
   import { tick, onMount } from 'svelte';
   import { S, CATS, catColor } from './lib/state.svelte.js';
-  import { fmt, date, drive } from './lib/fmt.js';
+  import { fmt, date, drive, plural } from './lib/fmt.js';
   import { dur } from './lib/ui/kube.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
@@ -42,6 +42,15 @@
 
   const pct = $derived(S.progress?.total ? S.progress.done / S.progress.total : 0);
 
+  const items = $derived(rules.reduce((a, r) => a + (r.count ?? 0), 0));
+  const secs = $derived((S.scanMs / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 }));
+  const kpis = $derived([
+    { id: 'found', icon: 'layers', label: 'Trouvés', value: found, kind: 'bytes', sub: `dans ${plural(catRows.filter((c) => c.total > 0).length, 'catégorie', 'catégories')}` },
+    { id: 'review', icon: 'eye', label: 'À vérifier', value: toReview, kind: 'bytes', sub: 'jamais coché d’office' },
+    { id: 'items', icon: 'files', label: 'Éléments', value: items, kind: 'int', sub: `dans ${plural(rules.filter((r) => r.size > 0).length, 'règle', 'règles')}` },
+    { id: 'time', icon: 'timer', label: 'Analyse', text: scanning ? null : `${secs}\u00a0s`, sub: scanning ? 'en cours' : S.scan ? `le ${date(S.scan.at)}` : '' },
+  ]);
+
   // bars start at 0 and stretch to their value on the first frame (and again whenever the value changes)
   let armed = $state(false);
   onMount(() => requestAnimationFrame(() => (armed = true)));
@@ -75,7 +84,6 @@
   <div class="kc-dash">
     <!-- hero -->
     <section class="k-card k-card--full kc-card kc-hero" aria-labelledby="kc-hero-title">
-      <div class="k-ambient-glow" aria-hidden="true" data-state={scanning ? 'off' : undefined}></div>
       <div class="kc-hero__body">
         <h1 id="kc-hero-title" class="kc-hero__headline">
           <Num value={safe} class="kc-num-hero" />
@@ -111,6 +119,20 @@
         {/if}
       </div>
     </section>
+
+    <!-- KPIs -->
+    <div class="kc-kpis">
+      {#each kpis as k, i (k.id)}
+        <article class="k-card k-card--full kc-kpi" in:fly={{ y: 8, duration: dur(240), delay: i * 40 }}>
+          <span class="kc-kpi__icon"><Icon name={k.icon} /></span>
+          <span class="kc-stat__label">{k.label}</span>
+          {#if k.kind}<Num value={k.value} kind={k.kind} class="kc-stat__num kc-kpi__num" />
+          {:else if k.text}<span class="kc-stat__num kc-kpi__num">{k.text}</span>
+          {:else}<span class="kc-stat__num kc-kpi__num k-shimmer">…</span>{/if}
+          <span class="kc-kpi__sub">{k.sub}</span>
+        </article>
+      {/each}
+    </div>
 
     <!-- safety band -->
     <ul class="kc-safety" aria-label="Ce que KubeClean garantit">
@@ -214,22 +236,18 @@
     .kc-hist { grid-column: span 3; }
   }
 
-  .kc-card { padding: var(--space-5); border-radius: var(--radius-2xl); }
+  .kc-card { padding: var(--space-6); }
   .kc-card__head { display: flex; align-items: center; margin-bottom: var(--space-4); }
   .kc-card__head .kc-card__title { flex: 1; }
   .kc-dim { color: var(--ink-secondary); font-size: 13px; font-weight: 400; }
-  .kc-tile { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: var(--radius-lg); background: var(--fill-secondary); }
+  .kc-tile { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: var(--radius-xl); background: var(--fill-secondary); }
 
   /* hero */
-  .kc-hero { position: relative; isolation: isolate; overflow: hidden; padding: var(--space-8) var(--space-6) var(--space-6); }
-  .kc-hero .k-ambient-glow { --k-ambient-glow-color: rgb(from var(--accent) r g b / 14%); --k-ambient-glow-bloom: rgb(from var(--accent) r g b / 20%); }
-  :global([data-theme='light']) .kc-hero .k-ambient-glow { --k-ambient-glow-color: rgb(from var(--accent) r g b / 7%); --k-ambient-glow-bloom: rgb(from var(--accent) r g b / 8%); }
-  @media (prefers-color-scheme: light) {
-    :global(:root:not([data-theme='dark'])) .kc-hero .k-ambient-glow { --k-ambient-glow-color: rgb(from var(--accent) r g b / 7%); --k-ambient-glow-bloom: rgb(from var(--accent) r g b / 8%); }
-  }
+  .kc-hero { position: relative; isolation: isolate; overflow: hidden; padding: 48px 40px 36px; }
+  .kc-hero__headline { row-gap: var(--space-2); }
   .kc-hero__body { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); max-width: 44rem; }
   .kc-hero__headline { display: flex; flex-wrap: wrap; align-items: baseline; margin: 0; }
-  .kc-hero__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-1); margin: 0; font-size: 14px; color: var(--ink-secondary); }
+  .kc-hero__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-1); margin: var(--space-1) 0 0; font-size: 15px; color: var(--ink-secondary); }
   .kc-hero__sub :global(.num) { color: var(--ink); font-weight: 510; }
   .kc-hero__dot { color: var(--ink-tertiary); }
   .kc-hero__review { color: var(--link); }
@@ -242,19 +260,28 @@
   .kc-hero__progress .k-progress-row__value { grid-area: value; }
   .kc-hero__progress .k-progress-row__label { grid-area: label; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* KPIs: big figures on glass, one tone per tile */
+  .kc-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+  @container kc-col (min-width: 760px) { .kc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .kc-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--space-5) var(--space-5) var(--space-4); overflow: hidden; }
+  .kc-kpi__icon { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-bottom: var(--space-3); border-radius: var(--radius-xl); background: var(--fill-secondary); color: var(--ink-secondary); }
+  .kc-kpi__icon :global(.k-icon) { width: 18px; height: 18px; }
+  .kc-kpi :global(.kc-kpi__num) { margin-block: 4px 2px; overflow: hidden; text-overflow: ellipsis; }
+  .kc-kpi__sub { font-size: 12px; line-height: 16px; color: var(--ink-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
   /* safety band */
   .kc-safety { list-style: none; margin: 0; padding: 0 var(--space-2); display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); font-size: 13px; line-height: 20px; color: var(--ink-secondary); }
   .kc-safety li { display: inline-flex; align-items: center; gap: var(--space-2); cursor: default; }
-  .kc-safety li :global(.k-icon) { color: var(--success); flex: none; }
+  .kc-safety li :global(.k-icon) { color: var(--ink-secondary); flex: none; }
   .kc-safety strong { font-weight: 510; color: var(--ink); }
 
   /* drive: one ring, used in ink-secondary, freed segment in success at the end */
   .kc-drivecard__body { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; }
-  .kc-ring { position: relative; flex: none; width: 128px; height: 128px; display: grid; place-items: center; }
-  .kc-ring__svg { position: absolute; inset: 0; width: 128px; height: 128px; color: var(--ink-secondary); stroke-width: 1.6; }
+  .kc-ring { position: relative; flex: none; width: 156px; height: 156px; display: grid; place-items: center; }
+  .kc-ring__svg { position: absolute; inset: 0; width: 156px; height: 156px; color: var(--ink-secondary); stroke-width: 1.8; }
   .kc-ring__freed { stroke: var(--success); stroke-linecap: round; stroke-dasharray: var(--kc-seg) calc(100 - var(--kc-seg)); stroke-dashoffset: calc(-1 * var(--kc-seg-start)); opacity: clamp(0, var(--kc-seg) * 1000, 1); transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dasharray var(--duration-relaxed) var(--ease-enter-snappy), stroke-dashoffset var(--duration-relaxed) var(--ease-enter-snappy), opacity var(--duration-basic); }
   .kc-ring__center { position: relative; display: flex; flex-direction: column; align-items: center; }
-  .kc-ring__pct { display: inline-flex; align-items: baseline; gap: 4px; font-size: 17px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
+  .kc-ring__pct { display: inline-flex; align-items: baseline; gap: 4px; font-size: 22px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
   .kc-ring__arrow { color: var(--ink-tertiary); font-weight: 400; }
   .kc-ring__pct :global(.kc-ring__after) { color: var(--success); }
   .kc-facts { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-width: 9rem; margin: 0; }
@@ -263,7 +290,7 @@
   .kc-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
 
   /* breakdown */
-  .kc-stack { display: flex; gap: 2px; height: 10px; border-radius: var(--radius-full); overflow: hidden; margin-bottom: var(--space-3); }
+  .kc-stack { display: flex; gap: 3px; height: 14px; border-radius: var(--radius-full); overflow: hidden; margin-bottom: var(--space-3); }
   .kc-stack > span { display: block; min-width: 0; transition: flex var(--duration-relaxed) var(--ease-enter-snappy); }
   .kc-stack__empty { flex: 1; background: var(--k-chart-empty, var(--fill-hover)) !important; }
   .kc-legend__head { display: flex; justify-content: flex-end; gap: var(--space-2); padding: 0 calc(56px + var(--space-3)) 4px 0; color: var(--ink-tertiary); text-transform: uppercase; }
@@ -286,7 +313,7 @@
 
   /* history */
   .kc-hist { padding: 0; }
-  .kc-hist__btn { display: block; width: 100%; padding: var(--space-5); text-align: left; border-radius: inherit; color: inherit; }
+  .kc-hist__btn { display: block; width: 100%; padding: var(--space-6); text-align: left; border-radius: inherit; color: inherit; }
   .kc-hist__more { display: inline-flex; align-items: center; gap: 2px; font-weight: 400; }
   .kc-hist__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: end; }
   .kc-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

@@ -58,13 +58,94 @@ body { overflow: hidden; }
 
 /* ---------- shared type scale (one size per role, every view) ---------- */
 /* hero figure: Dashboard, Result, Running */
-.kc-num-hero { font-size: 48px; line-height: 1.05; font-weight: 600; letter-spacing: -0.025em; color: var(--ink); font-variant-numeric: tabular-nums; }
-.kc-num-hero__unit { font-size: 20px; font-weight: 500; letter-spacing: 0; color: var(--ink-secondary); margin-inline-start: 8px; }
-/* stat tile figure: History tiles, Result tiles, Dashboard facts */
-.kc-stat__num { font-size: 24px; line-height: 1.15; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kc-num-hero { font-size: clamp(56px, 6.4vw, 92px); line-height: 1; font-weight: 650; letter-spacing: -0.045em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kc-num-hero__unit { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink-secondary); margin-inline-start: 12px; }
+/* stat tile figure: History tiles, Result tiles, Dashboard KPIs and facts */
+.kc-stat__num { font-size: 34px; line-height: 1.1; font-weight: 650; letter-spacing: -0.035em; color: var(--ink); font-variant-numeric: tabular-nums; }
 .kc-stat__label { font-size: 12px; line-height: 1.4; color: var(--ink-secondary); }
 /* card title: every k-card header */
-.kc-card__title { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ink); margin: 0; display: flex; align-items: center; gap: 8px; }
+.kc-card__title { font-size: 15px; line-height: 20px; font-weight: 600; color: var(--ink); margin: 0; display: flex; align-items: center; gap: 8px; }
+
+/* ---------- glass ----------
+   Neutral, no hue: depth comes from light. The pane is a quiet ground lit from above;
+   cards are frosted glass over it, with a 1px edge that catches the light at the top
+   and fades down the sides, and a long soft shadow. */
+:root {
+  --kc-ground: var(--surface-shell);
+  --kc-ground-light: var(--surface);
+  --kc-glass-tint: 74%;
+  --kc-rim-top: rgb(255 255 255 / .9);
+  --kc-rim-side: rgb(0 0 0 / .05);
+  --kc-rim-bottom: rgb(0 0 0 / .08);
+  --kc-sheen: rgb(255 255 255 / .5);
+  --kc-glass-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 18px 40px -22px rgb(0 0 0 / .22);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --kc-ground: var(--surface);
+    --kc-ground-light: rgb(255 255 255 / .05);
+    --kc-glass-tint: 50%;
+    --kc-rim-top: rgb(255 255 255 / .17);
+    --kc-rim-side: rgb(255 255 255 / .035);
+    --kc-rim-bottom: rgb(255 255 255 / .06);
+    --kc-sheen: rgb(255 255 255 / .035);
+    --kc-glass-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 24px 48px -24px rgb(0 0 0 / .7);
+  }
+}
+:root[data-theme='dark'] {
+  --kc-ground: var(--surface);
+  --kc-ground-light: rgb(255 255 255 / .05);
+  --kc-glass-tint: 50%;
+  --kc-rim-top: rgb(255 255 255 / .17);
+  --kc-rim-side: rgb(255 255 255 / .035);
+  --kc-rim-bottom: rgb(255 255 255 / .06);
+  --kc-sheen: rgb(255 255 255 / .035);
+  --kc-glass-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 24px 48px -24px rgb(0 0 0 / .7);
+}
+.k-app__main > .k-pane {
+  background: radial-gradient(80rem 36rem at 50% -14rem, var(--kc-ground-light), transparent 72%), var(--kc-ground);
+}
+.k-pane .k-card {
+  position: relative;
+  border: 0;
+  border-radius: var(--radius-4xl);
+  background:
+    linear-gradient(180deg, var(--kc-sheen), transparent 7rem),
+    color-mix(in srgb, var(--surface-elevated) var(--kc-glass-tint), transparent);
+  box-shadow: var(--kc-glass-shadow);
+  -webkit-backdrop-filter: blur(32px) saturate(120%);
+  backdrop-filter: blur(32px) saturate(120%);
+}
+.k-pane .k-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--kc-rim-top), var(--kc-rim-side) 22%, var(--kc-rim-side) 78%, var(--kc-rim-bottom));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .k-pane .k-card--interactive:not(:has(:is(button, a, [tabindex="0"]):hover)):hover {
+    background:
+      linear-gradient(180deg, var(--kc-sheen), transparent 7rem),
+      color-mix(in srgb, var(--surface-elevated) calc(var(--kc-glass-tint) + 12%), transparent);
+  }
+}
+/* sticky page header: clear at rest, frosted once content slides under it */
+.k-pane .k-page-header--sticky { background: transparent; transition: background-color var(--duration-basic) ease; }
+.k-pane .k-page-header--sticky[data-scrolled] {
+  background: color-mix(in srgb, var(--kc-ground) 72%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(120%);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .k-pane .k-card { background: var(--surface-elevated); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .k-pane .k-card::before { background: var(--border); }
+}
 .kc-card__title .k-icon { color: var(--ink-secondary); }
 .kc-card__meta { margin-inline-start: auto; font-size: 13px; font-weight: 500; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
 /* small text stays readable in the light theme: never --ink-tertiary under 13px */

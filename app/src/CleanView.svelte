@@ -90,7 +90,7 @@
         </div>
         <label class="k-page-search kc-search">
           <Icon name="search" />
-          <input class="k-page-search__input" type="search" placeholder="Rechercher une règle" aria-label="Rechercher une règle" bind:value={q} />
+          <input class="k-page-search__input" type="search" placeholder="Rechercher une règle" aria-label="Rechercher une règle" autocomplete="off" bind:value={q} />
           <button class="k-page-search__clear" type="button" aria-label="Effacer la recherche" onclick={() => (q = '')}><Icon name="x" /></button>
         </label>
         <span class="kc-tools__acts">

@@ -55,7 +55,7 @@
 </script>
 
 <dialog class="k-command kc-cmd" id="palette" bind:this={dlg} data-kube="dialog command-palette" aria-label="Palette de commandes" use:kubeOn={{ filter: onFilter, select: onSelect }}>
-  <div class="k-menu__search k-command__search"><Icon name="search" /><input type="text" placeholder="Une vue, une action, une règle…" aria-label="Commande" /></div>
+  <div class="k-menu__search k-command__search"><Icon name="search" /><input type="text" placeholder="Une vue, une action, une règle…" aria-label="Commande" autocomplete="off" /></div>
   <div class="k-command__list" role="listbox" aria-label="Commandes">
     {#each groups as g (g.id)}
       <div class="k-command__group" id="kc-cg-{g.id}" role="presentation">{g.label}</div>

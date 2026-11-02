@@ -123,14 +123,14 @@
                     <span class="k-nav-row__icon"><Icon name={c.icon} /></span>
                     <span class="k-nav-row__label">{c.label}</span>
                     <span class="k-nav-row__meta">{#if S.scan}{#if total}<Num value={total} />{:else}—{/if}{/if}</span>
-                    <span class="kc-cat__bar" aria-hidden="true"><span style:background={catColor(c.id)} style:width="{armed && total ? Math.round((sel / total) * 100) : 0}%"></span></span>
+                    <span class="kc-cat__bar" aria-hidden="true"><span style:background={catColor(c.id)} style:transform="scaleX({armed && total ? sel / total : 0})"></span></span>
                   </button>
                 {/each}
               </div>
             </div>
           </section>
         </div>
-        <div class="k-sidebar__footer kc-drives">
+        <div class="k-sidebar__footer kc-drives" class:kc-drives--many={S.drives.length > 3}>
           {#each S.drives as d (d.root)}
             {@const ratio = 1 - d.free / d.total}
             <div class="k-sidebar__card kc-drive" title="{fmt(d.free)} libres sur {fmt(d.total)}">
@@ -159,7 +159,7 @@
             <div class="k-pane__fade" aria-hidden="true"></div>
             <div class="k-pane__scroll k-scrollbar k-scrollbar--stable-both" bind:this={scroller}>
               {#key S.view}
-                <div class="k-pane__column kc-column" class:kc-column--wide={S.view === 'dashboard' || S.view === 'result'} in:fade={{ duration: dur(180) }}>
+                <div class="k-pane__column kc-column" class:kc-column--wide={S.view === 'dashboard' || S.view === 'result'} in:fade={{ duration: dur(120) }}>
                   {#if S.view === 'dashboard'}<Dashboard />
                   {:else if S.view === 'clean'}<CleanView />
                   {:else if S.view === 'projects'}<Projects />
@@ -182,7 +182,7 @@
   </div>
 
   {#if S.busy === 'clean'}
-    <div class="kc-running" transition:fade={{ duration: dur(200) }}><Running /></div>
+    <div class="kc-running" in:fade={{ duration: dur(200) }} out:fade={{ duration: dur(140) }}><Running /></div>
   {/if}
   <Confirm />
   <Palette />

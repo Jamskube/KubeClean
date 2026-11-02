@@ -136,7 +136,7 @@
             </div>
             <div role="search" class="kc-search"><div class="k-input k-input--sm" data-kube="input-clear">
               <span class="k-input__icon"><Icon name="search" /></span>
-              <input type="search" placeholder="Filtrer par nom" aria-label="Filtrer par nom" bind:value={q} />
+              <input type="search" placeholder="Filtrer par nom" aria-label="Filtrer par nom" autocomplete="off" bind:value={q} />
               <button class="k-input__clear" type="button" aria-label="Effacer" onclick={() => (q = '')}><Icon name="x" /></button>
             </div></div>
           </div>

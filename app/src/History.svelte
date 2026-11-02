@@ -8,6 +8,7 @@
 
   const dur = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220;
   const short = new Intl.DateTimeFormat('fr-BE', { day: 'numeric', month: 'short' });
+  const shortY = new Intl.DateTimeFormat('fr-BE', { day: 'numeric', month: 'short', year: 'numeric' });
   const time = new Intl.DateTimeFormat('fr-BE', { hour: '2-digit', minute: '2-digit' });
   const gain = (v) => (v > 0 ? `+${fmt(v)}` : v < 0 ? `−${fmt(-v)}` : '0 o');
   const cat = (id) => CATS.find((c) => c.id === id) ?? { id, label: id, icon: 'folder' };
@@ -60,7 +61,7 @@
 {#if n}
   <div class="kc-tiles">
     {#each [
-      { label: 'Espace regagné au total', value: total, kind: 'bytes', sub: `depuis le ${short.format(new Date(S.history[0].at))}` },
+      { label: 'Espace regagné au total', value: total, kind: 'bytes', sub: `depuis le ${(new Date(S.history[0].at).getFullYear() === new Date().getFullYear() ? short : shortY).format(new Date(S.history[0].at))}` },
       { label: 'Nettoyages', value: n, kind: 'int', sub: `${int(deleted)} fichiers supprimés` },
       { label: 'Moyenne par nettoyage', value: total / n, kind: 'bytes', sub: 'regagné sur le disque' },
       { label: 'Dernier nettoyage', value: Math.max(last.diskGain, 0), kind: 'bytes', sub: date(last.at) },

@@ -92,7 +92,7 @@
             <li class="kc-cat" in:fly={{ y: 6, duration: dur(220), delay: dur(340 + i * 40) }}>
               <span class="kc-cat__icon" style:color={catColor(c.id)}><Icon name={c.icon} /></span>
               <span class="kc-cat__label">{c.label}</span>
-              <div class="k-progress k-progress--sm kc-cat__bar" role="progressbar" aria-label="{c.label} : {fmt(c.freed)}" aria-valuemin="0" aria-valuemax="100"
+              <div class="k-progress k-progress--sm kc-cat__bar" role="progressbar" aria-label="{c.label} : {fmt(c.freed)}" aria-valuemin="0" aria-valuemax="100"
                 aria-valuenow={Math.round((c.freed / maxCat) * 100)} style:--k-progress={ready ? c.freed / maxCat : 0} style:--k-progress-color={catColor(c.id)}><div class="k-progress__bar"></div></div>
               <span class="kc-cat__size"><Num value={up(c.freed)} duration={1000} /></span>
             </li>

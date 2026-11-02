@@ -103,7 +103,7 @@
             <input type="checkbox" class="k-checkbox" aria-label="Cocher tout le projet {p.name}" checked={on === p.items.length} indeterminate={on > 0 && on < p.items.length} onchange={() => toggleProject(p)} />
             <span class="k-file-icon k-file-icon--sm kc-project__icon"><Icon name="folder-code" /></span>
             <div class="kc-project__text">
-              <h3 class="kc-card__title">{p.name}</h3>
+              <h2 class="kc-card__title">{p.name}</h2>
               <button class="k-pressable kc-path-btn" type="button" title="Afficher dans l’Explorateur" onclick={() => S.reveal(p.project)}>
                 <span class="k-filename" data-kube="truncate-middle" data-kube-name={p.project}></span>
               </button>
@@ -140,7 +140,6 @@
   .kc-actions { flex-wrap: wrap; justify-content: flex-start; row-gap: var(--space-2); }
 
   .kc-projects { display: flex; flex-direction: column; gap: var(--space-3); }
-  .kc-project { border-radius: var(--radius-2xl); }
   .kc-project__head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-light); }
   .kc-project__head .k-checkbox, .kc-project__head .k-badge { flex: none; }
   .kc-project__icon { --k-file-color: var(--accent); }

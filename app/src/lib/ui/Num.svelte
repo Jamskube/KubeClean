@@ -4,12 +4,13 @@
   import { fmt, int } from '../fmt.js';
   import { untrack } from 'svelte';
   import { Tween } from 'svelte/motion';
-  import { cubicOut } from 'svelte/easing';
+  import { quartOut } from 'svelte/easing';
+  import { reduced } from './kube.js';
 
   let { value = 0, kind = 'bytes', duration = 700, class: cls = '' } = $props();
   // intentionally seeded with the initial props: the tween then follows `value`
   // svelte-ignore state_referenced_locally
-  const t = new Tween(untrack(() => value), { duration: untrack(() => duration), easing: cubicOut });
+  const t = new Tween(untrack(() => value), { duration: reduced ? 0 : untrack(() => duration), easing: quartOut });
   $effect(() => { t.set(value); });
   const shown = $derived(kind === 'bytes' ? fmt(Math.round(t.current)) : kind === 'int' ? int(Math.round(t.current)) : kind === 'percent' ? `${Math.round(t.current)} %` : String(Math.round(t.current)));
 </script>

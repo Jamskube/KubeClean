@@ -24,7 +24,7 @@ body { overflow: hidden; }
 .kc-cat .k-nav-row__label { grid-row: 1; line-height: 16px; }
 .kc-cat .k-nav-row__meta { grid-row: 1; line-height: 16px; }
 .kc-cat__bar { grid-column: 2 / 4; grid-row: 2; height: 2px; margin-top: 1px; border-radius: var(--radius-full); background: var(--fill-hover); overflow: hidden; }
-.kc-cat__bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--duration-relaxed) var(--ease-enter-snappy); }
+.kc-cat__bar > span { display: block; width: 100%; height: 100%; background: var(--accent); transform-origin: left; transition: transform var(--duration-relaxed) var(--ease-enter-snappy); }
 .kc-cat[data-kube="tooltip"] .k-nav-row__label { pointer-events: none; }
 
 .kc-drives { gap: var(--space-2) !important; }
@@ -34,6 +34,10 @@ body { overflow: hidden; }
 .kc-drive__name { color: var(--ink); font-weight: 510; }
 .kc-drive__free { margin-left: auto; }
 .kc-version { color: var(--ink-tertiary); padding: var(--space-1) var(--space-1) 0; font-weight: 400; }
+/* many drives: one-line cards (same as short windows), the categories keep their room */
+.kc-drives--many .kc-drive { padding: 6px var(--space-3) !important; }
+.kc-drives--many .kc-drive .k-progress { display: none; }
+.kc-drives--many { gap: var(--space-1) !important; }
 /* short windows: one-line drive cards, the categories section is collapsible (kit nav-section) */
 @media (max-height: 700px) {
   .kc-drive { padding: 6px var(--space-3) !important; }
@@ -58,7 +62,7 @@ body { overflow: hidden; }
 
 /* ---------- shared type scale (one size per role, every view) ---------- */
 /* hero figure: Dashboard, Result, Running */
-.kc-num-hero { font-size: clamp(56px, 6.4vw, 92px); line-height: 1; font-weight: 650; letter-spacing: -0.045em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.kc-num-hero { font-size: 80px; line-height: 1; font-weight: 650; letter-spacing: -0.045em; color: var(--ink); font-variant-numeric: tabular-nums; }
 .kc-num-hero__unit { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink-secondary); margin-inline-start: 12px; }
 /* stat tile figure: History tiles, Result tiles, Dashboard KPIs and facts */
 .kc-stat__num { font-size: 34px; line-height: 1.1; font-weight: 650; letter-spacing: -0.035em; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -138,9 +142,28 @@ body { overflow: hidden; }
 /* sticky page header: clear at rest, frosted once content slides under it */
 .k-pane .k-page-header--sticky { background: transparent; transition: background-color var(--duration-basic) ease; }
 .k-pane .k-page-header--sticky[data-scrolled] {
+  border-bottom-color: transparent;
   background: color-mix(in srgb, var(--kc-ground) 72%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(120%);
   backdrop-filter: blur(24px) saturate(120%);
+}
+/* scroll edge: a soft fade under the frosted header instead of a hard divider */
+.k-pane .k-page-header--sticky::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 14px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--kc-ground) 72%, transparent), transparent);
+  opacity: 0;
+  transition: opacity var(--duration-basic) ease;
+  pointer-events: none;
+}
+.k-pane .k-page-header--sticky[data-scrolled]::after { opacity: 1; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 220ms; }
+@media (prefers-contrast: more) {
+  .k-pane .k-card { background: var(--surface-elevated); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .k-pane .k-card::before { background: var(--border-heavy); }
 }
 @media (prefers-reduced-transparency: reduce) {
   .k-pane .k-card { background: var(--surface-elevated); -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -155,3 +178,13 @@ body { overflow: hidden; }
    through, panes and cards stay opaque. Set by main.mjs, dark theme on Windows 11 only. */
 :root[data-window-backdrop='mica'],
 :root[data-window-backdrop='mica'] :is(body, #app, .k-app, .k-sidebar) { background: transparent; }
+
+/* ---------- polish ---------- */
+/* headings never leave one word alone on a line; body copy avoids orphans */
+:is(h1, h2, h3, .k-page-header__title, .k-empty__title) { text-wrap: balance; }
+:is(p, .k-page-header__subtitle, .k-empty__desc) { text-wrap: pretty; }
+/* tactile press: the kit scales the button fill, the label stays put */
+.k-btn { --k-press-scale: .96; }
+.k-btn--lg { --k-press-scale: .97; }
+/* the palette opens from Ctrl K, many times a day: it appears instantly */
+.kc-cmd[data-state=open] { animation: none; }

@@ -82,7 +82,9 @@ class App {
   setTheme(t) {
     this.theme = t;
     try { localStorage.setItem(THEME_KEY, t); } catch {}
-    this.applyTheme();
+    // cross-fade the switch instead of a hard brightness jump (no-op where unsupported)
+    if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(() => this.applyTheme());
+    else this.applyTheme();
   }
   applyTheme() {
     const root = document.documentElement;

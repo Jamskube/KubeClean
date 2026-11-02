@@ -87,7 +87,7 @@
     </div>
     <div class="k-settings-row__control kc-ctl">
       <div class="k-input k-number-field kc-n" data-kube="number-field">
-        <input {id} type="number" inputmode="numeric" min={LIMITS[key][0]} max={LIMITS[key][1]} step="1" bind:value={d[key]} aria-invalid={errors[key] ? 'true' : undefined} aria-describedby={errors[key] ? `${id}-err` : undefined} />
+        <input {id} type="number" inputmode="numeric" autocomplete="off" min={LIMITS[key][0]} max={LIMITS[key][1]} step="1" bind:value={d[key]} aria-invalid={errors[key] ? 'true' : undefined} aria-describedby={errors[key] ? `${id}-err` : undefined} />
         <span class="k-input__affix">{unit}</span>
         <span class="k-number-field__stepper">
           <button class="k-number-field__step" type="button" aria-label="Diminuer" tabindex="-1"><Icon name="minus" /></button>

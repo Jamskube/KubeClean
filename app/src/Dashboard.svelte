@@ -45,10 +45,10 @@
   const items = $derived(rules.reduce((a, r) => a + (r.count ?? 0), 0));
   const secs = $derived((S.scanMs / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 }));
   const kpis = $derived([
-    { id: 'found', icon: 'layers', label: 'Trouvés', value: found, kind: 'bytes', sub: `dans ${plural(catRows.filter((c) => c.total > 0).length, 'catégorie', 'catégories')}` },
-    { id: 'review', icon: 'eye', label: 'À vérifier', value: toReview, kind: 'bytes', sub: 'jamais coché d’office' },
-    { id: 'items', icon: 'files', label: 'Éléments', value: items, kind: 'int', sub: `dans ${plural(rules.filter((r) => r.size > 0).length, 'règle', 'règles')}` },
-    { id: 'time', icon: 'timer', label: 'Analyse', text: scanning ? null : `${secs}\u00a0s`, sub: scanning ? 'en cours' : S.scan ? `le ${date(S.scan.at)}` : '' },
+    { id: 'found', label: 'Trouvés', value: found, kind: 'bytes', sub: `dans ${plural(catRows.filter((c) => c.total > 0).length, 'catégorie', 'catégories')}` },
+    { id: 'review', label: 'À vérifier', value: toReview, kind: 'bytes', sub: 'jamais coché d’office' },
+    { id: 'items', label: 'Éléments', value: items, kind: 'int', sub: `dans ${plural(rules.filter((r) => r.size > 0).length, 'règle', 'règles')}` },
+    { id: 'time', label: 'Analyse', text: scanning ? null : `${secs}\u00a0s`, sub: scanning ? 'en cours' : S.scan ? `le ${date(S.scan.at)}` : '' },
   ]);
 
   // bars start at 0 and stretch to their value on the first frame (and again whenever the value changes)
@@ -91,7 +91,7 @@
         </h1>
         <p class="kc-hero__sub">
           {#if scanning}
-            <span class="k-shimmer k-shimmer--strong" role="status">Analyse en cours</span> · <Num value={found} /> trouvés jusqu’ici
+            <span class="k-shimmer k-shimmer--strong" role="status">Analyse en cours…</span> · <Num value={found} /> trouvés jusqu’ici
           {:else}
             sur <Num value={found} /> trouvés
             {#if toReview > 0}
@@ -122,10 +122,9 @@
 
     <!-- KPIs -->
     <div class="kc-kpis">
-      {#each kpis as k, i (k.id)}
-        <article class="k-card k-card--full kc-kpi" in:fly={{ y: 8, duration: dur(240), delay: i * 40 }}>
-          <span class="kc-kpi__icon"><Icon name={k.icon} /></span>
-          <span class="kc-stat__label">{k.label}</span>
+      {#each kpis as k (k.id)}
+        <article class="k-card k-card--full kc-kpi">
+          <span class="kc-stat__label kc-kpi__label">{k.label}</span>
           {#if k.kind}<Num value={k.value} kind={k.kind} class="kc-stat__num kc-kpi__num" />
           {:else if k.text}<span class="kc-stat__num kc-kpi__num">{k.text}</span>
           {:else}<span class="kc-stat__num kc-kpi__num k-shimmer">…</span>{/if}
@@ -230,10 +229,15 @@
   .kc-dash { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-4); }
   .kc-dash > * { grid-column: span 6; min-width: 0; }
   @container kc-col (min-width: 760px) {
-    .kc-drivecard { grid-column: span 2; }
-    .kc-breakdown { grid-column: span 4; }
+    .kc-hero { grid-column: span 4; order: -2; }
+    .kc-drivecard { grid-column: span 2; order: -1; }
+    .kc-drivecard .kc-drivecard__body { flex-direction: column; align-items: stretch; gap: var(--space-5); }
+    .kc-drivecard .kc-ring { align-self: center; }
+    .kc-drivecard .kc-facts { gap: var(--space-4); min-width: 0; }
+    .kc-drivecard :global(.kc-stat__num) { font-size: 26px; }
+    .kc-breakdown { grid-column: span 3; }
     .kc-top { grid-column: span 3; }
-    .kc-hist { grid-column: span 3; }
+    .kc-hist { grid-column: span 6; }
   }
 
   .kc-card { padding: var(--space-6); }
@@ -244,7 +248,8 @@
 
   /* hero */
   .kc-hero { position: relative; isolation: isolate; overflow: hidden; padding: 48px 40px 36px; }
-  .kc-hero__headline { row-gap: var(--space-2); }
+  .kc-hero__headline { gap: var(--space-2) 12px; }
+  .kc-hero__headline :global(.kc-num-hero__unit) { margin-inline-start: 0; }
   .kc-hero__body { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); max-width: 44rem; }
   .kc-hero__headline { display: flex; flex-wrap: wrap; align-items: baseline; margin: 0; }
   .kc-hero__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-1); margin: var(--space-1) 0 0; font-size: 15px; color: var(--ink-secondary); }
@@ -263,10 +268,10 @@
   /* KPIs: big figures on glass, one tone per tile */
   .kc-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
   @container kc-col (min-width: 760px) { .kc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-  .kc-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--space-5) var(--space-5) var(--space-4); overflow: hidden; }
-  .kc-kpi__icon { display: inline-grid; place-items: center; width: 36px; height: 36px; margin-bottom: var(--space-3); border-radius: var(--radius-xl); background: var(--fill-secondary); color: var(--ink-secondary); }
-  .kc-kpi__icon :global(.k-icon) { width: 18px; height: 18px; }
-  .kc-kpi :global(.kc-kpi__num) { margin-block: 4px 2px; overflow: hidden; text-overflow: ellipsis; }
+  .kc-kpi { container-type: inline-size; display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--space-5) var(--space-5) var(--space-4); overflow: hidden; }
+  .kc-kpi :global(.kc-kpi__num) { margin-top: var(--space-6); }
+  .kc-kpi__label { font-size: 13px; font-weight: 510; }
+  .kc-kpi :global(.kc-kpi__num) { margin-bottom: 2px; font-size: min(34px, 13cqi); white-space: nowrap; }
   .kc-kpi__sub { font-size: 12px; line-height: 16px; color: var(--ink-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* safety band */
@@ -281,19 +286,19 @@
   .kc-ring__svg { position: absolute; inset: 0; width: 156px; height: 156px; color: var(--ink-secondary); stroke-width: 1.8; }
   .kc-ring__freed { stroke: var(--success); stroke-linecap: round; stroke-dasharray: var(--kc-seg) calc(100 - var(--kc-seg)); stroke-dashoffset: calc(-1 * var(--kc-seg-start)); opacity: clamp(0, var(--kc-seg) * 1000, 1); transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dasharray var(--duration-relaxed) var(--ease-enter-snappy), stroke-dashoffset var(--duration-relaxed) var(--ease-enter-snappy), opacity var(--duration-basic); }
   .kc-ring__center { position: relative; display: flex; flex-direction: column; align-items: center; }
-  .kc-ring__pct { display: inline-flex; align-items: baseline; gap: 4px; font-size: 22px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
+  .kc-ring__pct { display: inline-flex; align-items: baseline; gap: 4px; font-size: 19px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
   .kc-ring__arrow { color: var(--ink-tertiary); font-weight: 400; }
   .kc-ring__pct :global(.kc-ring__after) { color: var(--success); }
   .kc-facts { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-width: 9rem; margin: 0; }
   .kc-facts dt { display: flex; align-items: center; gap: 6px; }
-  .kc-facts dd { margin: 2px 0 0; display: flex; align-items: baseline; gap: 6px; }
+  .kc-facts dd { margin: 2px 0 0; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
   .kc-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
 
   /* breakdown */
   .kc-stack { display: flex; gap: 3px; height: 14px; border-radius: var(--radius-full); overflow: hidden; margin-bottom: var(--space-3); }
   .kc-stack > span { display: block; min-width: 0; transition: flex var(--duration-relaxed) var(--ease-enter-snappy); }
   .kc-stack__empty { flex: 1; background: var(--k-chart-empty, var(--fill-hover)) !important; }
-  .kc-legend__head { display: flex; justify-content: flex-end; gap: var(--space-2); padding: 0 calc(56px + var(--space-3)) 4px 0; color: var(--ink-tertiary); text-transform: uppercase; }
+  .kc-legend__head { display: flex; justify-content: flex-end; gap: var(--space-2); padding: 0 calc(56px + var(--space-3)) 4px 0; color: var(--ink-tertiary); text-transform: uppercase; letter-spacing: .06em; }
   .kc-legend__head span { width: 5.5rem; text-align: right; }
   .kc-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
   .kc-legend__row { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-1); border-radius: var(--radius-md); font-size: 13px; }

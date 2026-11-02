@@ -20,7 +20,7 @@ const h = (s) => { let x = 2166136261; for (const c of s) x = Math.imul(x ^ c.ch
 const MB = 1024 * 1024;
 const sizeFor = (r) => {
   const big = { chromeCache: 6500, claudeSessions: 5300, npmCache: 4700, diagTraces: 3600, wslCrashes: 1800, teamsCache: 900, edgeCache: 420, gradleCaches: 1400, cargoCache: 800, vscodeWorkspaces: 160, userTemp: 240, thumbCache: 8, d3dShaders: 26, werReports: 0, inetCache: 0.03, recycleBin: 296, adminWindowsTemp: 120, adminWer: 13, adminDelivery: 0, adminComponents: 0, playwright: 1100, pipUv: 650, nodeCompile: 3 };
-  return Math.round((big[r.id] ?? (h(r.id) < 0.45 ? 0 : h(r.id) * 300)) * MB);
+  return Math.round((big[r.id] ?? (h(r.id) < 0.45 ? 0 : h(r.id) * 300)) * MB * (WORST && r.id === 'npmCache' ? 90 : 1));
 };
 const names = ['a9f3c1.bin', 'cache_0001', 'index-dir', 'f_000a2c', 'data_3', 'Code Cache', 'GPUCache', 'old_v2.log', 'session-7f.jsonl', 'tmp8812.tmp'];
 
@@ -67,8 +67,28 @@ function itemsFor(r, limit = 5) {
   }
   return out;
 }
-const countFor = (r) => (sizeFor(r) === 0 ? 0 : r.kind === 'projects' ? PROJECTS.length : r.kind === 'largeFiles' ? LARGE.length : r.kind === 'oldDownloads' ? DOWNLOADS.length : r.kind === 'recycleBin' ? 3 : Math.max(1, Math.round(h(r.id) * 5800)));
+const countFor = (r) => (sizeFor(r) === 0 ? 0 : r.kind === 'projects' ? PROJECTS.length : r.kind === 'largeFiles' ? LARGE.length : r.kind === 'oldDownloads' ? DOWNLOADS.length : r.kind === 'recycleBin' ? 3 : WORST && r.id === 'thumbCache' ? 1 : Math.max(1, Math.round(h(r.id) * 5800 * (WORST ? 830 : 1))));
 const RUNNING = ['chrome.exe', 'explorer.exe', 'msedge.exe'];
+
+// KC_MOCK_DATA=worst: realistic worst case for UI stress tests (break-ui). Deep client paths,
+// long French file names, a 1.2 TB virtual disk, a near-full system drive, six drives,
+// a single old download, a year of history. Dev only, like the rest of this file.
+const WORST = process.env.KC_MOCK_DATA === 'worst';
+if (WORST) {
+  PROJECTS.splice(0, PROJECTS.length,
+    ['Documents\\Clients\\Northwind Industries Holdings\\2026\\Migration plateforme e-commerce\\frontend-nextjs-storefront-v3\\node_modules', 'Node', 2.9e9, 2184],
+    ['dev\\x\\target', 'Rust / Maven', 47.3e9, 0],
+    ['source\\repos\\Aleksandra.Wiśniewska-Kowalczyk.PortailFournisseurs.Api\\obj', '.NET', 1 * MB, 1],
+    ['dev\\monorepo\\packages\\@northwind\\design-system-tokens-generator\\.turbo', 'Turborepo', 0.4e9, 14],
+  );
+  LARGE.splice(0, LARGE.length,
+    ['Hyper-V\\Virtual Hard Disks\\Windows Server 2025 Datacenter Evaluation (copie de sauvegarde avant migration).vhdx', 1.24e12, 640],
+    ['Videos\\Enregistrement réunion équipe produit - revue trimestrielle Q3 2026 (version finale corrigée) (2).mp4', 38.4e9, 31],
+    ['Documents\\a.zip', 0.52e9, 1],
+  );
+  DOWNLOADS.splice(0, DOWNLOADS.length, ['Downloads\\Facture_2025-001284_Northwind-Industries-Holdings_bartholomew.fitzgerald.pdf', 1 * MB, 91]);
+}
+
 
 function summary(r) {
   const perItem = ['projects', 'largeFiles', 'oldDownloads'].includes(r.kind);
@@ -84,6 +104,7 @@ function summary(r) {
 }
 
 let drives = [{ root: 'C:\\', total: 511e9, free: 58.4e9 }, { root: 'G:\\', total: 1000e9, free: 200.2e9 }];
+if (WORST) drives = [{ root: 'C:\\', total: 2000e9, free: 1.2e9 }, { root: 'D:\\', total: 4000e9, free: 3871e9 }, { root: 'E:\\', total: 64e9, free: 0 }, { root: 'F:\\', total: 256e9, free: 255.9e9 }, { root: 'G:\\', total: 1000e9, free: 200.2e9 }, { root: 'Z:\\', total: 16000e9, free: 9200e9 }];
 let settings = { projectRoots: ['%USERPROFILE%/Desktop', '%USERPROFILE%/Documents', '%USERPROFILE%/PycharmProjects', '%USERPROFILE%/source', '%USERPROFILE%/dev'], projectIdleDays: 14, largeFileMinMb: 500, downloadsOlderThanDays: 90, ignore: [`${USER}\\Desktop\\KubeClean\\core\\target`] };
 let history = [
   { at: now - 31 * DAY, freed: 18.2e9, diskGain: 17.9e9, deleted: 48210, skipped: 12, recycled: 0, byCat: { browsers: 6.1e9, dev: 9.3e9, system: 2.8e9 } },
@@ -91,6 +112,7 @@ let history = [
   { at: now - 8 * DAY, freed: 11.6e9, diskGain: 11.2e9, deleted: 22044, skipped: 30, recycled: 0, byCat: { dev: 7.6e9, projects: 3.0e9, system: 1.0e9 } },
   { at: now - 2 * DAY, freed: 2.3e9, diskGain: 2.2e9, deleted: 3302, skipped: 0, recycled: 0, byCat: { browsers: 2.3e9 } },
 ];
+if (WORST) history = Array.from({ length: 60 }, (_, i) => ({ at: now - (365 - i * 6) * DAY, freed: (i % 7 === 0 ? 120e9 : 0.3e9 + h('w' + i) * 9e9), diskGain: i === 59 ? -0.2e9 : (i % 7 === 0 ? 118e9 : 0.3e9 + h('w' + i) * 8.6e9), deleted: Math.round(h('d' + i) * 4_800_000), skipped: i === 59 ? 1 : 0, recycled: i === 59 ? 1 : 0, byCat: { dev: 2e9, browsers: 1e9, apps: 0.5e9, projects: 0.2e9, files: 0.1e9, system: 0.05e9, admin: 0.01e9 } }));
 let scans = null;
 let busy = false;
 let cancelled = false;

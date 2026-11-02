@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld('kc', {
   setCleaning: (on) => ipcRenderer.send('cleaning', !!on),
   setTheme: (t) => ipcRenderer.send('theme', String(t)),
   appVersion: () => ipcRenderer.invoke('app-version'),
+  onBackdrop(fn) {
+    ipcRenderer.on('backdrop', (_e, on) => fn(!!on));
+    ipcRenderer.invoke('backdrop').then((on) => fn(!!on));
+  },
 });

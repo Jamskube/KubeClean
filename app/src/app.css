@@ -69,3 +69,8 @@ body { overflow: hidden; }
 .kc-card__meta { margin-inline-start: auto; font-size: 13px; font-weight: 500; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
 /* small text stays readable in the light theme: never --ink-tertiary under 13px */
 .kc-path { color: var(--ink-secondary); }
+
+/* Mica: the DWM paints the window backdrop; only the chrome (title bar, sidebar) lets it
+   through, panes and cards stay opaque. Set by main.mjs, dark theme on Windows 11 only. */
+:root[data-window-backdrop='mica'],
+:root[data-window-backdrop='mica'] :is(body, #app, .k-app, .k-sidebar) { background: transparent; }

@@ -53,6 +53,7 @@ class App {
 
   constructor() {
     this.applyTheme();
+    kc.onBackdrop((on) => { document.documentElement.dataset.windowBackdrop = on ? 'mica' : 'none'; });
     kc.onEvent((m) => {
       if (m.event === 'progress') this.progress = m.data;
       else if (m.event === 'rule') this.live = [...this.live, m.data];

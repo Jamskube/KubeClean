@@ -3,6 +3,7 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -80,8 +81,12 @@ ipcMain.handle('pick-folder', async (e) => {
 });
 
 // ---------- window ----------
+// Mica (Windows 11 22H2+, build 22621), dark theme only, like Doku: the DWM paints it
+// under the transparent chrome (title bar, sidebar); content panes stay opaque.
+const MICA_OK = process.platform === 'win32' && Number(os.release().split('.')[2]) >= 22621;
+const mica = () => MICA_OK && nativeTheme.shouldUseDarkColors;
 const overlay = () => (nativeTheme.shouldUseDarkColors
-  ? { color: '#000000', symbolColor: '#ffffff', height: 44 }
+  ? { color: mica() ? '#00000000' : '#000000', symbolColor: '#ffffff', height: 44 }
   : { color: '#f9f9f9', symbolColor: '#000000', height: 44 });
 
 function createWindow() {
@@ -90,6 +95,8 @@ function createWindow() {
     title: 'KubeClean',
     icon: path.join(here, '..', 'public', 'icon.png'),
     backgroundColor: overlay().color,
+    // set before the first show: applied later, the DWM can keep an opaque backdrop
+    backgroundMaterial: mica() ? 'mica' : 'none',
     titleBarStyle: 'hidden',
     titleBarOverlay: overlay(),
     show: false,
@@ -121,6 +128,7 @@ let cleaning = false;
 ipcMain.on('cleaning', (e, on) => { if (fromApp(e)) cleaning = !!on; });
 // the page owns the theme choice; the native window buttons follow it
 ipcMain.on('theme', (e, t) => { if (fromApp(e) && ['system', 'light', 'dark'].includes(t)) nativeTheme.themeSource = t; });
+ipcMain.handle('backdrop', () => mica());
 
 app.whenReady().then(() => {
   protocol.handle('app', (req) => {
@@ -130,7 +138,13 @@ app.whenReady().then(() => {
     if (host !== 'kubeclean' || rel.startsWith('..') || path.isAbsolute(rel)) return new Response('', { status: 403 });
     return net.fetch(pathToFileURL(file).toString());
   });
-  nativeTheme.on('updated', () => win?.setTitleBarOverlay(overlay()));
+  nativeTheme.on('updated', () => {
+    if (!win) return;
+    win.setBackgroundMaterial(mica() ? 'mica' : 'none');
+    win.setBackgroundColor(overlay().color);
+    win.setTitleBarOverlay(overlay());
+    win.webContents.send('backdrop', mica());
+  });
   createWindow();
 });
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });

@@ -48,7 +48,7 @@ jobs:
         working-directory: app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npx electron-builder --mac --arm64
+        run: npx electron-builder --mac --arm64 --publish never
 
       - name: Signature ad hoc et image disque
         id: dmg
@@ -64,7 +64,7 @@ jobs:
           DMG="KubeClean-$VERSION-mac-arm64.dmg"
           hdiutil create -volname KubeClean -srcfolder dmg -ov -format UDZO "$DMG"
           echo "file=$DMG" >> "$GITHUB_OUTPUT"
-          lipo -archs "$APP/Contents/Resources/kubeclean-core" "$APP/Contents/MacOS/KubeClean"
+          for B in "$APP/Contents/Resources/kubeclean-core" "$APP/Contents/MacOS/KubeClean"; do echo "$(lipo -archs "$B") $B"; done
 
       - name: Essai du moteur empaqueté (analyse seule)
         continue-on-error: true

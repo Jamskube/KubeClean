@@ -3,9 +3,11 @@
 
 use crate::fsutil::*;
 use crate::rules::{Kind, Task};
-use crate::scan::{RuleScan, artifact_label, task_roots};
+use crate::scan::{RuleScan, artifact_label};
+#[cfg(windows)]
+use crate::scan::task_roots;
 use crate::store::{HistoryEntry, Settings};
-use crate::win;
+use crate::os;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -87,7 +89,7 @@ fn still_valid(s: &RuleScan, item: &crate::scan::Item, settings: &Settings, canc
 }
 
 fn total_free() -> u64 {
-    win::fixed_drives().iter().map(|d| d.free).sum()
+    os::fixed_drives().iter().map(|d| d.free).sum()
 }
 
 pub fn clean(
@@ -97,6 +99,22 @@ pub fn clean(
     data_dir: Option<&Path>,
     cancel: &AtomicBool,
     progress: &dyn Fn(usize, usize, &str, u64), // (done, total, label, bytes freed so far)
+) -> CleanReport {
+    // Windows verrouille un fichier ouvert : le supprimer échoue, il est sauté. Sous macOS la
+    // suppression réussit même ouvert : une règle dont l'app tourne est sautée en entier.
+    let running = if cfg!(windows) { vec![] } else { os::running_processes() };
+    clean_with(scans, picks, settings, data_dir, cancel, progress, &running)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn clean_with(
+    scans: &[RuleScan],
+    picks: &[Pick],
+    settings: &Settings,
+    data_dir: Option<&Path>,
+    cancel: &AtomicBool,
+    progress: &dyn Fn(usize, usize, &str, u64),
+    running: &[String],
 ) -> CleanReport {
     let before = total_free();
     let mut rep = CleanReport::default();
@@ -114,12 +132,15 @@ pub fn clean(
                 continue;
             }
             Kind::RecycleBin => {
-                let (b, _) = win::recycle_bin_info();
-                win::empty_recycle_bin();
-                let (a, _) = win::recycle_bin_info();
+                let (b, _) = os::recycle_bin_info();
+                os::empty_recycle_bin();
+                let (a, _) = os::recycle_bin_info();
                 st.freed = b.saturating_sub(a);
                 st.deleted = (a < b) as u64;
                 st.skipped = (a > 0) as u64;
+            }
+            _ if s.rule.apps.iter().any(|a| running.contains(&a.to_lowercase())) => {
+                st.skipped = chosen(s, p).len() as u64;
             }
             _ => {
                 let items = chosen(s, p);
@@ -140,7 +161,7 @@ pub fn clean(
                 }
                 if !to_bin.is_empty() {
                     let paths: Vec<PathBuf> = to_bin.iter().map(|(p, _)| p.clone()).collect();
-                    let gone = win::recycle(&paths);
+                    let gone = os::recycle(&paths);
                     for (p, size) in &to_bin {
                         if gone.contains(p) {
                             st.freed += size;
@@ -179,11 +200,11 @@ fn run_elevated(tasks: &[Task], data_dir: Option<&Path>, rep: &mut CleanReport) 
     let names: Vec<&str> = tasks.iter().map(|t| t.name()).collect();
     // only fixed task names and our own data path reach the elevated command line
     let args = format!("--elevated {} --out \"{}\"", names.join(","), out.display());
-    match win::run_self_elevated(&args) {
-        win::ElevatedRun::Refused => rep.elevation = Some("refused".into()),
-        win::ElevatedRun::Failed(e) => rep.elevation = Some(e),
-        win::ElevatedRun::Done(code) if code != 0 => rep.elevation = Some(format!("le processus admin s'est arrêté avec le code {code}")),
-        win::ElevatedRun::Done(_) => match fs::read_to_string(&out).ok().and_then(|t| serde_json::from_str::<Vec<TaskReport>>(&t).ok()) {
+    match os::run_self_elevated(&args) {
+        os::ElevatedRun::Refused => rep.elevation = Some("refused".into()),
+        os::ElevatedRun::Failed(e) => rep.elevation = Some(e),
+        os::ElevatedRun::Done(code) if code != 0 => rep.elevation = Some(format!("le processus admin s'est arrêté avec le code {code}")),
+        os::ElevatedRun::Done(_) => match fs::read_to_string(&out).ok().and_then(|t| serde_json::from_str::<Vec<TaskReport>>(&t).ok()) {
             Some(list) => {
                 for t in &list {
                     rep.freed += t.stats.freed;
@@ -199,6 +220,7 @@ fn run_elevated(tasks: &[Task], data_dir: Option<&Path>, rep: &mut CleanReport) 
 }
 
 /// Body of the elevated process (`--elevated a,b --out file`).
+#[cfg(windows)]
 pub fn elevated_main(task_list: &str, out: &Path) -> i32 {
     if out.extension().and_then(|e| e.to_str()) != Some("json") || !out.parent().is_some_and(|p| p.is_dir()) {
         return 2;
@@ -222,7 +244,7 @@ pub fn elevated_main(task_list: &str, out: &Path) -> i32 {
             }
             Task::DeliveryOptimization | Task::ComponentStore => {
                 let before = total_free();
-                let res = if t == Task::ComponentStore { win::run_dism_component_cleanup() } else { win::run_delivery_optimization_cleanup() };
+                let res = if t == Task::ComponentStore { os::run_dism_component_cleanup() } else { os::run_delivery_optimization_cleanup() };
                 if let Err(e) = res {
                     r.ok = false;
                     r.error = Some(e);
@@ -256,6 +278,7 @@ mod tests {
     use super::*;
     use crate::rules::Rule;
     use crate::scan::{Ctx, scan_rule};
+    #[cfg(windows)]
     use std::process::Command;
 
     const DAY: i64 = 86_400_000;
@@ -263,6 +286,12 @@ mod tests {
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, s).unwrap();
     }
+    // sous macOS, le lien symbolique joue le rôle de la jonction
+    #[cfg(unix)]
+    fn junction(link: &Path, target: &Path) {
+        std::os::unix::fs::symlink(target, link).expect("symlink");
+    }
+    #[cfg(windows)]
     fn junction(link: &Path, target: &Path) {
         let ok = Command::new("cmd").args(["/c", "mklink", "/J"]).arg(link).arg(target).output().unwrap().status.success();
         assert!(ok, "mklink /J failed");
@@ -336,6 +365,7 @@ mod tests {
         prune_empty_dirs(&root, &[], 0);
         assert!(target.join("vide-a-conserver").exists());
         assert!(target.join("a.bin").exists());
+        #[cfg(windows)]
         fs::remove_dir(&root).unwrap();
     }
 
@@ -392,6 +422,22 @@ mod tests {
         assert_eq!(rep.skipped, 1);
         assert!(outside.join("keep.txt").exists(), "deleting s1 removed its junction, not the target");
         assert!(root.join("toplink").exists());
+    }
+
+    #[test]
+    fn rule_whose_app_is_open_is_skipped_whole() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().join("cache");
+        w(&root.join("a.bin"), "cache");
+        let r = rule(serde_json::json!({ "id": "t", "cat": "x", "title": "t", "kind": "files", "paths": [root.to_str().unwrap()], "apps": ["Google Chrome"] }));
+        let (settings, cancel) = (Settings::default(), AtomicBool::new(false));
+        let s = scan_rule(&r, &future_ctx(&settings, &cancel));
+        assert_eq!(s.items.len(), 1);
+        let rep = clean_with(&[s.clone()], &[all("t")], &settings, None, &cancel, &|_, _, _, _| {}, &["google chrome".into()]);
+        assert_eq!((rep.deleted, rep.skipped), (0, 1), "app open: nothing touched");
+        assert!(root.join("a.bin").exists());
+        let rep = clean_with(&[s], &[all("t")], &settings, None, &cancel, &|_, _, _, _| {}, &["safari".into()]);
+        assert_eq!(rep.deleted, 1, "another app open: cleaned");
     }
 
     #[test]

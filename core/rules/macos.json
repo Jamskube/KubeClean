@@ -1,0 +1,46 @@
+{
+  "globalExclude": [".DS_Store", ".localized"],
+  "rules": [
+    { "id": "userCaches", "cat": "system", "title": "Caches des applications", "hint": "Bibliothèque/Caches, fichiers non modifiés depuis 7 jours. Chaque app recrée les siens à la demande",
+      "kind": "files", "paths": ["%HOME%/Library/Caches"], "depth": 30, "olderThanDays": 7, "default": true,
+      "excludeDirs": ["%HOME%/Library/Caches/Google", "%HOME%/Library/Caches/Microsoft Edge", "%HOME%/Library/Caches/BraveSoftware",
+                      "%HOME%/Library/Caches/Firefox", "%HOME%/Library/Caches/com.spotify.client",
+                      "%HOME%/Library/Caches/com.apple.bird", "%HOME%/Library/Caches/CloudKit", "%HOME%/Library/Caches/com.apple.Safari",
+                      "%HOME%/Library/Caches/com.apple.HomeKit"] },
+    { "id": "userLogs", "cat": "system", "title": "Journaux et rapports de plantage", "hint": "Bibliothèque/Logs, plus vieux de 7 jours",
+      "kind": "files", "paths": ["%HOME%/Library/Logs"], "depth": 10, "olderThanDays": 7, "default": true },
+    { "id": "iosUpdates", "cat": "system", "title": "Mises à jour d’iPhone et d’iPad", "hint": "Fichiers .ipsw déjà installés, retéléchargés si besoin",
+      "kind": "files", "paths": ["%HOME%/Library/iTunes/iPhone Software Updates", "%HOME%/Library/iTunes/iPad Software Updates"],
+      "mask": "*.ipsw", "depth": 1, "default": true },
+
+    { "id": "chromeCache", "cat": "browsers", "title": "Chrome : caches", "hint": "Cache, GPUCache, CacheStorage. Historique, mots de passe et cookies ne sont pas touchés",
+      "kind": "files", "depth": 10, "apps": ["google chrome"], "default": true,
+      "paths": ["%HOME%/Library/Caches/Google/Chrome", "%HOME%/Library/Application Support/Google/Chrome/*/GPUCache",
+                "%HOME%/Library/Application Support/Google/Chrome/*/Service Worker/CacheStorage",
+                "%HOME%/Library/Application Support/Google/Chrome/GrShaderCache", "%HOME%/Library/Application Support/Google/Chrome/ShaderCache",
+                "%HOME%/Library/Application Support/Google/Chrome/GraphiteDawnCache"] },
+    { "id": "edgeCache", "cat": "browsers", "title": "Edge : caches", "hint": "Les mêmes dossiers que Chrome",
+      "kind": "files", "depth": 10, "apps": ["microsoft edge"], "default": true,
+      "paths": ["%HOME%/Library/Caches/Microsoft Edge", "%HOME%/Library/Application Support/Microsoft Edge/*/GPUCache",
+                "%HOME%/Library/Application Support/Microsoft Edge/*/Service Worker/CacheStorage",
+                "%HOME%/Library/Application Support/Microsoft Edge/GrShaderCache", "%HOME%/Library/Application Support/Microsoft Edge/ShaderCache"] },
+    { "id": "braveCache", "cat": "browsers", "title": "Brave : caches", "hint": "Les mêmes dossiers que Chrome",
+      "kind": "files", "depth": 10, "apps": ["brave browser"], "default": true,
+      "paths": ["%HOME%/Library/Caches/BraveSoftware/Brave-Browser", "%HOME%/Library/Application Support/BraveSoftware/Brave-Browser/*/GPUCache",
+                "%HOME%/Library/Application Support/BraveSoftware/Brave-Browser/*/Service Worker/CacheStorage"] },
+    { "id": "firefoxCache", "cat": "browsers", "title": "Firefox : cache", "hint": "cache2 de chaque profil",
+      "kind": "files", "depth": 10, "apps": ["firefox"], "default": true,
+      "paths": ["%HOME%/Library/Caches/Firefox/Profiles/*/cache2"] },
+
+    { "id": "spotifyCache", "cat": "apps", "title": "Spotify : cache d’écoute", "hint": "Musique déjà écoutée en streaming. Les titres téléchargés hors connexion ne sont pas touchés",
+      "kind": "files", "paths": ["%HOME%/Library/Caches/com.spotify.client"], "depth": 10, "apps": ["spotify"], "default": true },
+    { "id": "adobeMediaCache", "cat": "apps", "title": "Adobe : cache média", "hint": "Aperçus et audio conformé de Premiere et After Effects, plus vieux de 30 jours. Recréés à l’ouverture d’un projet",
+      "kind": "files", "paths": ["%HOME%/Library/Application Support/Adobe/Common/Media Cache Files", "%HOME%/Library/Application Support/Adobe/Common/Media Cache"],
+      "depth": 5, "olderThanDays": 30, "default": true },
+
+    { "id": "largeFiles", "cat": "files", "title": "Gros fichiers", "hint": "Fichiers volumineux dans ton dossier personnel, hors Bibliothèque, Applications et photothèque. Envoyés à la Corbeille, jamais cochés d’office",
+      "kind": "largeFiles", "default": false },
+    { "id": "oldDownloads", "cat": "files", "title": "Vieux téléchargements", "hint": "Éléments du dossier Téléchargements pas touchés depuis longtemps. Envoyés à la Corbeille",
+      "kind": "oldDownloads", "default": false }
+  ]
+}

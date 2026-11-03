@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 
+#[cfg(windows)]
 pub const DEFAULT_RULES: &str = include_str!("../rules/default.json");
+#[cfg(target_os = "macos")]
+pub const DEFAULT_RULES: &str = include_str!("../rules/macos.json");
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -38,6 +41,7 @@ impl Task {
             Task::ComponentStore => "componentStore",
         }
     }
+    #[cfg_attr(not(windows), allow(dead_code))] // only the Windows elevated helper reads task names
     pub fn parse(s: &str) -> Option<Task> {
         [Task::WindowsTemp, Task::SystemWer, Task::DeliveryOptimization, Task::ComponentStore].into_iter().find(|t| t.name() == s)
     }
@@ -145,8 +149,18 @@ mod tests {
     #[test]
     fn builtin_rules_are_valid() {
         let s = RuleSet::load(None).expect("default rules parse and validate");
-        assert!(s.rules.len() > 30);
-        assert!(s.rules.iter().any(|r| r.kind == Kind::Elevated && r.task == Some(Task::ComponentStore)));
+        #[cfg(windows)]
+        {
+            assert!(s.rules.len() > 30);
+            assert!(s.rules.iter().any(|r| r.kind == Kind::Elevated && r.task == Some(Task::ComponentStore)));
+        }
+        // macOS : ni tâche admin, ni Corbeille, ni projets ; chaque chemin part du dossier personnel
+        #[cfg(target_os = "macos")]
+        {
+            assert!(s.rules.len() >= 10);
+            assert!(!s.rules.iter().any(|r| matches!(r.kind, Kind::Elevated | Kind::RecycleBin | Kind::Projects)));
+            assert!(s.rules.iter().flat_map(|r| r.paths.iter().chain(&r.exclude_dirs)).all(|p| p.starts_with("%HOME%/Library/")));
+        }
     }
     #[test]
     fn duplicate_ids_rejected() {

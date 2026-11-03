@@ -3,14 +3,22 @@
 
 use rayon::prelude::*;
 use std::fs::{self, Metadata};
+#[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(windows)]
 pub const FILE_ATTRIBUTE_READONLY: u32 = 0x1;
+#[cfg(windows)]
 pub const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+#[cfg(windows)]
 pub const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+pub const SEP: char = std::path::MAIN_SEPARATOR;
+/// Dossier personnel dans les règles et les réglages.
+pub const HOME: &str = if cfg!(windows) { "%USERPROFILE%" } else { "%HOME%" };
 
 pub fn now_ms() -> i64 {
     ms(SystemTime::now())
@@ -19,8 +27,44 @@ fn ms(t: SystemTime) -> i64 {
     t.duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
+#[cfg(windows)]
 pub fn is_reparse(md: &Metadata) -> bool {
     md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+/// Lien symbolique, ou fichier iCloud évacué (« dataless ») : le lire le téléchargerait,
+/// le supprimer le supprimerait dans le nuage. Même traitement qu’un point d’analyse Windows.
+#[cfg(unix)]
+pub fn is_reparse(md: &Metadata) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::macos::fs::MetadataExt;
+        const SF_DATALESS: u32 = 0x4000_0000;
+        if md.st_flags() & SF_DATALESS != 0 {
+            return true;
+        }
+    }
+    md.file_type().is_symlink()
+}
+
+/// Volume d'un élément sous Unix ; sous Windows les lecteurs se distinguent par leur racine.
+#[cfg(unix)]
+pub fn device(md: &Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt as _;
+    md.dev()
+}
+#[cfg(windows)]
+pub fn device(_: &Metadata) -> u64 {
+    0
+}
+
+/// Une jonction Windows se retire comme un dossier ; un lien Unix toujours comme un fichier.
+#[cfg(windows)]
+fn link_is_dir(md: &Metadata) -> bool {
+    md.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
+}
+#[cfg(unix)]
+fn link_is_dir(_: &Metadata) -> bool {
+    false
 }
 
 /// Un parent remplacé par une jonction ne doit pas rediriger une ancienne sélection.
@@ -52,22 +96,33 @@ pub fn expand_env(p: &str) -> Option<PathBuf> {
         let after = &rest[start + 1..];
         let end = after.find('%')?;
         let val = std::env::var(&after[..end]).ok()?;
+        // Unix : une variable vide ou « / » devant « /Library » donnerait un chemin système
+        #[cfg(unix)]
+        {
+            if !val.starts_with('/') || val.trim_end_matches('/').is_empty() {
+                return None;
+            }
+        }
         out.push_str(&val);
         rest = &after[end + 1..];
     }
     out.push_str(rest);
-    Some(PathBuf::from(out.replace('/', "\\")))
+    #[cfg(windows)]
+    let out = out.replace('/', "\\");
+    Some(PathBuf::from(out))
 }
 
 fn key(p: &Path) -> String {
-    let s = p.to_string_lossy().to_lowercase().replace('/', "\\");
-    s.trim_end_matches('\\').to_string()
+    let s = p.to_string_lossy().to_lowercase();
+    #[cfg(windows)]
+    let s = s.replace('/', "\\");
+    s.trim_end_matches(SEP).to_string()
 }
 
 /// Strictly inside `parent` (never equal), case-insensitive, component-aware.
 pub fn is_under(child: &Path, parent: &Path) -> bool {
     let (c, p) = (key(child), key(parent));
-    c.len() > p.len() + 1 && c.starts_with(&p) && c.as_bytes()[p.len()] == b'\\'
+    c.len() > p.len() + 1 && c.starts_with(&p) && c.as_bytes()[p.len()] == SEP as u8
 }
 pub fn same_path(a: &Path, b: &Path) -> bool {
     key(a) == key(b)
@@ -137,9 +192,15 @@ pub fn resolve_paths(pattern: &str) -> Vec<PathBuf> {
         return vec![];
     }
     let s = full.to_string_lossy().to_string();
-    let mut parts = s.split('\\').filter(|x| !x.is_empty());
-    let Some(first) = parts.next() else { return vec![] };
-    let mut bases = vec![PathBuf::from(format!("{first}\\"))];
+    #[allow(unused_mut)] // only Windows takes the drive segment off first
+    let mut parts = s.split(SEP).filter(|x| !x.is_empty());
+    #[cfg(windows)]
+    let mut bases = {
+        let Some(first) = parts.next() else { return vec![] };
+        vec![PathBuf::from(format!("{first}\\"))]
+    };
+    #[cfg(unix)]
+    let mut bases = vec![PathBuf::from("/")];
     for seg in parts {
         let mut next = vec![];
         for b in &bases {
@@ -251,6 +312,12 @@ impl DelStats {
     }
 }
 
+// sous Unix, la lecture seule d’un fichier n’empêche pas de le supprimer
+#[cfg(unix)]
+fn remove_file_force(p: &Path, _: &Metadata) -> std::io::Result<()> {
+    fs::remove_file(p)
+}
+#[cfg(windows)]
 fn remove_file_force(p: &Path, md: &Metadata) -> std::io::Result<()> {
     match fs::remove_file(p) {
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && md.file_attributes() & FILE_ATTRIBUTE_READONLY != 0 => {
@@ -272,7 +339,7 @@ pub fn delete_tree(p: &Path, cancel: &AtomicBool) -> DelStats {
     let Ok(md) = fs::symlink_metadata(p) else { return st };
     if is_reparse(&md) {
         if fs::read_link(p).is_ok() {
-            let r = if md.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0 { fs::remove_dir(p) } else { fs::remove_file(p) };
+            let r = if link_is_dir(&md) { fs::remove_dir(p) } else { fs::remove_file(p) };
             if r.is_ok() { st.deleted += 1 } else { st.skipped += 1 }
         } else {
             st.skipped += 1;
@@ -320,9 +387,18 @@ mod tests {
     fn wildcard_and_under() {
         assert!(wildcard("*.dmp", "A.DMP") && wildcard("thumbcache_*.db", "thumbcache_32.db"));
         assert!(!wildcard("*.dmp", "a.dmpx") && wildcard("a?c", "abc") && wildcard("*", ""));
-        assert!(is_under(Path::new(r"C:\a\b\c"), Path::new(r"C:\a\b")));
-        assert!(!is_under(Path::new(r"C:\a\bc"), Path::new(r"C:\a\b")));
-        assert!(!is_under(Path::new(r"C:\a\b"), Path::new(r"C:\A\B\")));
-        assert!(!is_clean_abs(Path::new(r"C:\a\..\Windows")) && !is_clean_abs(Path::new(r"a\b")));
+        #[cfg(windows)]
+        {
+            assert!(is_under(Path::new(r"C:\a\b\c"), Path::new(r"C:\a\b")));
+            assert!(!is_under(Path::new(r"C:\a\bc"), Path::new(r"C:\a\b")));
+            assert!(!is_under(Path::new(r"C:\a\b"), Path::new(r"C:\A\B\")));
+            assert!(!is_clean_abs(Path::new(r"C:\a\..\Windows")) && !is_clean_abs(Path::new(r"a\b")));
+        }
+        #[cfg(unix)]
+        {
+            assert!(is_under(Path::new("/a/b/c"), Path::new("/a/b")) && is_under(Path::new("/A/b/c"), Path::new("/a/B/")));
+            assert!(!is_under(Path::new("/a/bc"), Path::new("/a/b")) && !is_under(Path::new("/a/b"), Path::new("/A/B/")));
+            assert!(!is_clean_abs(Path::new("/a/../etc")) && !is_clean_abs(Path::new("a/b")));
+        }
     }
 }

@@ -12,8 +12,10 @@ Moteur Rust `kubeclean-core.exe` : analyse et nettoyage du disque, piloté en JS
 | `src/rules.rs` | Chargement des règles |
 | `src/fsutil.rs` | Utilitaires fichiers : détection des liens (reparse), dates, variables d’environnement |
 | `src/store.rs` | Persistance (historique, réglages) |
-| `src/win.rs` | API Windows (Corbeille, UAC, processus, registre) |
-| `rules/default.json` | Règles de nettoyage par défaut |
+| `src/win.rs` | API Windows (Corbeille, UAC, processus, registre), module `os` sous Windows |
+| `src/mac.rs` | API macOS (volume de démarrage, processus, Corbeille par NSFileManager chargé à l’exécution), module `os` sous macOS ; aucune tâche admin |
+| `rules/default.json` | Règles de nettoyage Windows |
+| `rules/macos.json` | Règles de nettoyage macOS : caches et journaux de Bibliothèque, mises à jour iPhone, navigateurs, Spotify, Adobe, fichiers personnels |
 
 ## Dependencies
 - External: rayon, serde, serde_json, windows-sys ; tests : tempfile

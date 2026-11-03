@@ -9,7 +9,9 @@ mod fsutil;
 mod rules;
 mod scan;
 mod store;
-mod win;
+#[cfg_attr(windows, path = "win.rs")]
+#[cfg_attr(target_os = "macos", path = "mac.rs")]
+mod os;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -65,8 +67,8 @@ fn take_busy(c: &Core) -> Result<Busy<'_>, String> {
 
 fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
     match method {
-        "hello" => Ok(json!({ "version": env!("CARGO_PKG_VERSION"), "dataDir": c.data_dir(), "drives": win::fixed_drives() })),
-        "drives" => Ok(json!(win::fixed_drives())),
+        "hello" => Ok(json!({ "version": env!("CARGO_PKG_VERSION"), "dataDir": c.data_dir(), "drives": os::fixed_drives() })),
+        "drives" => Ok(json!(os::fixed_drives())),
         "cancel" => {
             c.cancel.store(true, Ordering::SeqCst);
             Ok(json!(true))
@@ -75,7 +77,7 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             let _b = take_busy(c)?;
             let set = rules::RuleSet::load(c.data_dir())?;
             let settings = c.store.settings();
-            let running = win::running_processes();
+            let running = os::running_processes();
             let on_rule = |done: usize, total: usize, s: &scan::RuleScan| {
                 c.event("progress", json!({ "phase": "scan", "done": done, "total": total, "label": s.rule.title }));
                 c.event("rule", json!(scan::summarize(s, &running))); // live reveal, same shape as the final list
@@ -86,7 +88,7 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             }
             let rules: Vec<_> = scans.iter().map(|s| scan::summarize(s, &running)).collect();
             *c.scans.lock().unwrap_or_else(|e| e.into_inner()) = scans;
-            Ok(json!({ "rules": rules, "drives": win::fixed_drives(), "at": fsutil::now_ms(), "settings": settings }))
+            Ok(json!({ "rules": rules, "drives": os::fixed_drives(), "at": fsutil::now_ms(), "settings": settings }))
         }
         "items" => {
             #[derive(Deserialize)]
@@ -145,6 +147,7 @@ fn arg(args: &[String], name: &str) -> Option<String> {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    #[cfg(windows)] // admin tasks exist on Windows only
     if let Some(tasks) = arg(&args, "--elevated") {
         let out = arg(&args, "--out").map(PathBuf::from).unwrap_or_default();
         std::process::exit(clean::elevated_main(&tasks, &out));

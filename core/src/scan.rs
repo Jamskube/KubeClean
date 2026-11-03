@@ -3,7 +3,7 @@
 use crate::fsutil::*;
 use crate::rules::{Kind, Rule, RuleSet, Task};
 use crate::store::Settings;
-use crate::win;
+use crate::os;
 use rayon::prelude::*;
 use serde::Serialize;
 use std::fs;
@@ -121,7 +121,7 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
             }
         }
         Kind::RecycleBin => {
-            let (size, count) = win::recycle_bin_info();
+            let (size, count) = os::recycle_bin_info();
             if size > 0 || count > 0 {
                 items.push(Item { path: PathBuf::from("Corbeille"), size, newest: 0, is_dir: true, label: Some(format!("{count}")), idle_days: None, default: true });
             }
@@ -131,22 +131,25 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
             items = scan_projects(&roots, cx);
         }
         Kind::LargeFiles => {
-            if let Some(home) = expand_env("%USERPROFILE%") {
+            if let Some(home) = expand_env(HOME) {
                 roots = vec![home.clone()];
                 let min = cx.settings.large_file_min_mb * 1024 * 1024;
                 // CrossDevice = the phone's storage seen through Phone Link: deleting there
                 // can delete on the phone. Never list it.
-                let mut skip: Vec<PathBuf> = ["AppData", "Downloads", "CrossDevice"].iter().map(|d| home.join(d)).collect();
+                // macOS : Library porte iCloud, Mail et les autres apps ; Dropbox synchronise comme OneDrive.
+                let skipped: &[&str] = if cfg!(windows) { &["AppData", "Downloads", "CrossDevice"] } else { &["Library", "Downloads", "Applications", "Dropbox", "OneDrive", "Google Drive", "Box Sync", "Pictures/Photo Booth Library", "Pictures/iPhoto Library"] };
+                let mut skip: Vec<PathBuf> = skipped.iter().map(|d| home.join(d)).collect();
                 for v in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
                     if let Ok(p) = std::env::var(v) {
                         skip.push(PathBuf::from(p)); // deleting a synced file deletes it in the cloud too
                     }
                 }
-                items = large_files(&home, &skip, min, 12, cx.cancel);
+                let dev = fs::symlink_metadata(&home).map(|m| device(&m)).unwrap_or(0);
+                items = large_files(&home, &skip, min, 12, dev, cx.cancel);
             }
         }
         Kind::OldDownloads => {
-            if let Some(dl) = expand_env("%USERPROFILE%/Downloads") {
+            if let Some(dl) = expand_env(&format!("{HOME}/Downloads")) {
                 let cut = cx.now - cx.settings.downloads_older_than_days as i64 * DAY;
                 roots = vec![dl.clone()];
                 let ents: Vec<PathBuf> = fs::read_dir(&dl).map(|rd| rd.filter_map(|e| e.ok()).map(|e| e.path()).collect()).unwrap_or_default();
@@ -154,7 +157,8 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
                     .into_par_iter()
                     .filter_map(|p| {
                         let md = fs::symlink_metadata(&p).ok()?;
-                        if is_reparse(&md) || p.file_name()?.to_string_lossy().eq_ignore_ascii_case("desktop.ini") {
+                        let name = p.file_name()?.to_string_lossy().to_string();
+                        if is_reparse(&md) || name.eq_ignore_ascii_case("desktop.ini") || (cfg!(unix) && name.starts_with('.')) {
                             return None;
                         }
                         let s = tree_stat(&p, cx.cancel);
@@ -353,7 +357,14 @@ pub fn scan_projects(roots: &[PathBuf], cx: &Ctx) -> Vec<Item> {
     items
 }
 
-fn large_files(dir: &Path, skip: &[PathBuf], min: u64, depth: u32, cancel: &AtomicBool) -> Vec<Item> {
+/// macOS : un dossier à extension (.app, .photoslibrary, .fcpbundle…) est un paquet que le Finder
+/// montre comme un seul document ; y retirer un fichier le corrompt.
+/// ponytail: toute extension compte, même « Projet v1.2 » ; lister les types de paquets si des gros fichiers y manquent.
+fn is_package(name: &str) -> bool {
+    cfg!(target_os = "macos") && Path::new(name).extension().is_some()
+}
+
+fn large_files(dir: &Path, skip: &[PathBuf], min: u64, depth: u32, dev: u64, cancel: &AtomicBool) -> Vec<Item> {
     if cancel.load(Ordering::Relaxed) || skip.iter().any(|s| same_path(s, dir)) {
         return vec![];
     }
@@ -367,10 +378,11 @@ fn large_files(dir: &Path, skip: &[PathBuf], min: u64, depth: u32, cancel: &Atom
             let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
             if md.is_dir() {
                 // tool caches (.gradle, .cargo…) and build folders are other rules' business
-                if depth == 0 || name.starts_with('.') || SKIP_DIRS.contains(&name.as_str()) || artifact_label(&p).is_some() {
+                // another volume mounted under home (network share, FUSE cloud drive) is not ours
+                if depth == 0 || name.starts_with('.') || SKIP_DIRS.contains(&name.as_str()) || is_package(&name) || device(&md) != dev || artifact_label(&p).is_some() {
                     return vec![];
                 }
-                large_files(&p, skip, min, depth - 1, cancel)
+                large_files(&p, skip, min, depth - 1, dev, cancel)
             } else if md.len() >= min {
                 let t = mtime(&md);
                 vec![Item { newest: t, size: md.len(), path: p, is_dir: false, label: None, idle_days: Some((now_ms() - t) / DAY), default: false }]

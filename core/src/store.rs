@@ -1,6 +1,6 @@
 //! Settings and history, stored as JSON in the app data folder given by Electron.
 
-use crate::fsutil::{expand_env, is_clean_abs, is_under, same_path};
+use crate::fsutil::{HOME, expand_env, is_clean_abs, is_under, same_path};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -20,7 +20,7 @@ impl Default for Settings {
         Settings {
             project_roots: ["Desktop", "Documents", "PycharmProjects", "PyCharmMiscProject", "source", "Projects", "dev", "code", "repos"]
                 .iter()
-                .map(|d| format!("%USERPROFILE%/{d}"))
+                .map(|d| format!("{HOME}/{d}"))
                 .collect(),
             project_idle_days: 14,
             large_file_min_mb: 500,
@@ -100,6 +100,14 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn ignore_and_sanitize_on_unix_paths() {
+        let s = Settings { ignore: vec!["/keep/this".into(), "rel/path".into(), "/a/../b".into()], ..Default::default() }.sanitized();
+        assert_eq!(s.ignore, vec!["/keep/this".to_string()]);
+        assert!(s.is_ignored(Path::new("/keep/this/file.txt")) && !s.is_ignored(Path::new("/keep/thisother")));
+    }
+    #[cfg(windows)]
     #[test]
     fn ignore_matches_path_and_children_only() {
         let s = Settings { ignore: vec![r"C:\keep\this".into()], ..Default::default() };
@@ -107,6 +115,7 @@ mod tests {
         assert!(s.is_ignored(Path::new(r"C:\KEEP\this\file.txt")));
         assert!(!s.is_ignored(Path::new(r"C:\keep\thisother")));
     }
+    #[cfg(windows)]
     #[test]
     fn sanitize_drops_relative_and_dotdot() {
         let s = Settings { ignore: vec!["rel\\path".into(), r"C:\a\..\b".into(), r"C:\ok".into()], ..Default::default() }.sanitized();

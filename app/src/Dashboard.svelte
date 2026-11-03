@@ -65,7 +65,7 @@
           <div class="kc-ring">
             <svg class="k-donut" viewBox="0 0 24 24" style:--k-progress={usedPct} role="img" aria-label="Disque {drive(d.root)} : {Math.round(usedPct)} % utilisés">
               <circle class="k-donut__track" cx="12" cy="12" r="11" /><circle class="k-donut__arc" cx="12" cy="12" r="11" pathLength="100" />
-            </svg><span>{drive(d.root)}</span>
+            </svg><span>{#if d.root === '/'}<Icon name="hard-drive" />{:else}{drive(d.root)}{/if}</span>
           </div>
           <div class="kc-storage__free"><Num value={d.free} /><span>libres sur {fmt(d.total)}</span><span class:kc-storage__warning={d.free / d.total < 0.1}>{d.free / d.total < 0.1 ? 'Espace bientôt saturé' : `${Math.round(usedPct)} % utilisés`}</span></div>
         </div>

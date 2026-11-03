@@ -1,6 +1,6 @@
 // Electron main: window, app:// protocol, and the bridge to the Rust core.
 // All file-system work happens in kubeclean-core.exe; this file only relays.
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -155,6 +155,12 @@ app.whenReady().then(() => {
     }
     win.webContents.send('backdrop', backdrop());
   });
+  // the default macOS menu is in English: same roles, French labels
+  if (MAC) Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'KubeClean', submenu: [{ role: 'about', label: 'À propos de KubeClean' }, { type: 'separator' }, { role: 'hide', label: 'Masquer KubeClean' }, { role: 'hideOthers', label: 'Masquer les autres' }, { role: 'unhide', label: 'Tout afficher' }, { type: 'separator' }, { role: 'quit', label: 'Quitter KubeClean' }] },
+    { label: 'Édition', submenu: [{ role: 'undo', label: 'Annuler' }, { role: 'redo', label: 'Rétablir' }, { type: 'separator' }, { role: 'cut', label: 'Couper' }, { role: 'copy', label: 'Copier' }, { role: 'paste', label: 'Coller' }, { role: 'selectAll', label: 'Tout sélectionner' }] },
+    { label: 'Fenêtre', submenu: [{ role: 'minimize', label: 'Réduire' }, { role: 'zoom', label: 'Zoom' }, { type: 'separator' }, { role: 'close', label: 'Fermer la fenêtre' }] },
+  ]));
   createWindow();
 });
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });

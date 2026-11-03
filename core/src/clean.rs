@@ -58,18 +58,28 @@ fn chosen<'a>(s: &'a RuleScan, p: &Pick) -> Vec<&'a crate::scan::Item> {
 }
 
 /// Is this item still exactly what its rule allowed at scan time?
-fn still_valid(s: &RuleScan, path: &Path, settings: &Settings, cancel: &AtomicBool) -> bool {
-    if !s.roots.iter().any(|r| is_under(path, r)) || settings.is_ignored(path) {
+fn still_valid(s: &RuleScan, item: &crate::scan::Item, settings: &Settings, cancel: &AtomicBool) -> bool {
+    let path = &item.path;
+    if cancel.load(std::sync::atomic::Ordering::Relaxed)
+        || !s.roots.iter().any(|r| is_under(path, r)) || settings.is_ignored(path)
+        || !path_without_reparse(path) {
         return false;
     }
     let Ok(md) = fs::symlink_metadata(path) else { return false };
-    if is_reparse(&md) {
+    if is_reparse(&md) || md.is_dir() != item.is_dir {
+        return false;
+    }
+    // Même sans limite d’âge, une modification depuis l’analyse invalide le choix.
+    let current = if md.is_dir() { tree_stat(path, cancel) }
+        else { TreeStat { size: md.len(), newest: item_time(&md), files: 1 } };
+    if cancel.load(std::sync::atomic::Ordering::Relaxed)
+        || current.size != item.size || current.newest != item.newest {
         return false;
     }
     match s.rule.kind {
         Kind::Files | Kind::Elevated => md.is_file() && (s.cutoff == 0 || item_time(&md) <= s.cutoff),
         // a folder that became active again since the scan (a live session) is left alone
-        Kind::Children => s.cutoff == 0 || tree_stat(path, cancel).newest <= s.cutoff,
+        Kind::Children => s.cutoff == 0 || current.newest <= s.cutoff,
         Kind::Projects => artifact_label(path).is_some(),
         Kind::LargeFiles | Kind::OldDownloads => true,
         Kind::RecycleBin => false,
@@ -118,7 +128,7 @@ pub fn clean(
                     if cancel.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
-                    if !still_valid(s, &it.path, settings, cancel) {
+                    if !still_valid(s, it, settings, cancel) {
                         st.skipped += 1;
                         continue;
                     }
@@ -271,6 +281,62 @@ mod tests {
         let mut v: Vec<_> = s.items.iter().map(|i| i.path.file_name().unwrap().to_string_lossy().to_string()).collect();
         v.sort();
         v
+    }
+
+    #[test]
+    fn refuse_un_fichier_modifie_meme_sans_limite_age() {
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("document.bin");
+        w(&path, "avant");
+        let r = rule(serde_json::json!({ "id": "t", "cat": "x", "title": "t", "kind": "files", "paths": [t.path()] }));
+        let (settings, cancel) = (Settings::default(), AtomicBool::new(false));
+        let mut s = scan_rule(&r, &future_ctx(&settings, &cancel));
+        let item = s.items[0].clone();
+        for kind in [Kind::Files, Kind::LargeFiles, Kind::OldDownloads] {
+            s.rule.kind = kind;
+            assert!(still_valid(&s, &item, &settings, &cancel));
+        }
+        // Même taille, mais modification ultérieure : l’âge seul ne suffit pas.
+        let file = fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(60)).unwrap();
+        drop(file);
+        for kind in [Kind::Files, Kind::LargeFiles, Kind::OldDownloads] {
+            s.rule.kind = kind;
+            assert!(!still_valid(&s, &item, &settings, &cancel));
+        }
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn refuse_un_cache_enrichi_depuis_analyse() {
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("session");
+        w(&path.join("a.bin"), "cache");
+        let r = rule(serde_json::json!({ "id": "t", "cat": "x", "title": "t", "kind": "children", "paths": [t.path()] }));
+        let (settings, cancel) = (Settings::default(), AtomicBool::new(false));
+        let s = scan_rule(&r, &future_ctx(&settings, &cancel));
+        assert!(still_valid(&s, &s.items[0], &settings, &cancel));
+        w(&path.join("b.bin"), "nouveau");
+        assert!(!still_valid(&s, &s.items[0], &settings, &cancel));
+    }
+
+    #[test]
+    fn refuse_un_parent_remplace_par_une_jonction() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().join("cache");
+        let target = t.path().join("ailleurs");
+        w(&root.join("a.bin"), "cache");
+        let r = rule(serde_json::json!({ "id": "t", "cat": "x", "title": "t", "kind": "files", "paths": [root] }));
+        let (settings, cancel) = (Settings::default(), AtomicBool::new(false));
+        let s = scan_rule(&r, &future_ctx(&settings, &cancel));
+        fs::rename(&root, &target).unwrap();
+        fs::create_dir(target.join("vide-a-conserver")).unwrap();
+        junction(&root, &target);
+        assert!(!still_valid(&s, &s.items[0], &settings, &cancel));
+        prune_empty_dirs(&root, &[], 0);
+        assert!(target.join("vide-a-conserver").exists());
+        assert!(target.join("a.bin").exists());
+        fs::remove_dir(&root).unwrap();
     }
 
     #[test]

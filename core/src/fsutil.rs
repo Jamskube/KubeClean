@@ -23,6 +23,13 @@ pub fn is_reparse(md: &Metadata) -> bool {
     md.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
 }
 
+/// Un parent remplacé par une jonction ne doit pas rediriger une ancienne sélection.
+pub fn path_without_reparse(path: &Path) -> bool {
+    is_clean_abs(path) && path.ancestors().all(|p| {
+        fs::symlink_metadata(p).is_ok_and(|md| !is_reparse(&md))
+    })
+}
+
 /// Newest of write, creation and change time. A file just extracted from an old
 /// archive keeps an old mtime but gets a fresh creation time: it is not "old".
 pub fn item_time(md: &Metadata) -> i64 {
@@ -292,6 +299,9 @@ pub fn delete_tree(p: &Path, cancel: &AtomicBool) -> DelStats {
 
 /// Remove empty directories under `root` (never `root` itself), bottom-up.
 pub fn prune_empty_dirs(dir: &Path, exclude_dirs: &[PathBuf], cutoff: i64) {
+    if !path_without_reparse(dir) {
+        return;
+    }
     for (p, md) in read_dir_sorted(dir) {
         if !md.is_dir() || is_reparse(&md) || exclude_dirs.iter().any(|x| same_path(x, &p)) {
             continue;

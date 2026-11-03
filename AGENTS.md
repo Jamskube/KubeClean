@@ -11,7 +11,7 @@ Context for AI coding assistants. Read at the start of every session.
 ## Setup commands
 - `cd app; npm install`
 - `npm start` (dans `app/` : build du moteur + vite build + electron) — ou `KubeClean.cmd` à la racine
-- `KC_MOCK=1 npx electron .` : moteur factice, aucun accès disque
+- `KC_MOCK=1 npx electron .` : moteur factice, aucun accès disque ; `KC_MOCK_DATA=worst` en plus : données extrêmes (To, six lecteurs, noms longs) pour tester la mise en page
 - `npm run dist` : installeur `app/release/KubeClean Setup <version>.exe`
 - `cargo test` (dans `core/`)
 - `npm run check` (svelte-check, dans `app/`)
@@ -53,3 +53,7 @@ Before non-trivial work, retrieve by task terms and affected paths (`/knowledge 
 ### Active critical lessons
 <!-- knowledge:generated:start -->
 <!-- knowledge:generated:end -->
+
+## Memories
+- 2026-11-02 · warning : lancer un seul harnais de captures Electron (`app/scripts/shot.mjs`) à la fois pour éviter les interférences entre fenêtres.
+- 2026-11-02 · workaround : pour l’icône, conserver le motif détouré, recomposer une tuile blanche uniforme et vérifier les pixels centraux à l’export pour détecter une tache (`app/scripts/make-icon.mjs`).

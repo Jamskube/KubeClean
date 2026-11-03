@@ -17,16 +17,45 @@
   const status = (i) => (i < done ? 'done' : i === done ? 'current' : 'pending');
   /** keeps the active row in view (re-runs when `done` moves) */
   const follow = (i) => (el) => { if (status(i) === 'current') el.scrollIntoView({ block: 'nearest', behavior: rm ? 'auto' : 'smooth' }); };
+  const label = $derived(measuring ? 'Mesure du disque' : S.progress?.label ?? 'Préparation');
+  // le focus suit la bascule seulement, jamais la première apparition
+  let toggled = false;
+  const reduce = (on) => { toggled = true; S.runMini = on; };
+  const focusIfToggled = (el) => { if (toggled) el.focus({ preventScroll: true }); };
+  function onKey(e) {
+    if (e.key === 'Escape' && !S.runMini && !e.defaultPrevented && !document.querySelector('dialog[open]')) { e.preventDefault(); reduce(true); }
+  }
 </script>
+
+<svelte:window onkeydown={onKey} />
+
+{#if S.runMini}
+<div class="kc-mini k-card k-card--shadow" role="status" aria-live="polite" transition:fly={{ y: 12, duration: dur(220) }}>
+  <div class="kc-mini__head">
+    <span class="kc-mini__icon"><Icon name="broom-sparkles" /></span>
+    <div class="kc-mini__text">
+      <strong><Num value={S.progress?.freed ?? 0} duration={900} /> libérés</strong>
+      <span class="k-shimmer k-shimmer--strong">{label}…</span>
+    </div>
+    <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Agrandir la progression du nettoyage" data-kube="tooltip" data-kube-tooltip="Agrandir" onclick={() => reduce(false)} {@attach focusIfToggled}><Icon name="maximize-2" /></button>
+  </div>
+  <div class="kc-mini__bar">
+    <div class="k-progress k-progress--sm" role="progressbar" aria-label="Progression du nettoyage" aria-valuemin="0" aria-valuemax="100" aria-valuenow={total ? Math.round((done / total) * 100) : 0}
+      style:--k-progress={total ? done / total : 0}><div class="k-progress__bar"></div></div>
+    <span>{Math.min(done, total)}/{total}</span>
+  </div>
+</div>
+{:else}
 
 <div class="kc-run" transition:fade={{ duration: dur(200) }}>
   <div class="kc-run__card k-card k-card--shadow" role="status" aria-live="polite" in:fly={{ y: 12, duration: dur(300) }}>
+    <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm kc-run__reduce" type="button" aria-label="Réduire la progression dans un coin (Échap)" data-kube="tooltip" data-kube-tooltip="Réduire · Échap" onclick={() => reduce(true)} {@attach focusIfToggled}><Icon name="minimize-2" /></button>
     <div class="kc-run__hero">
       <span class="kc-run__icon"><Icon name="broom-sparkles" /></span>
       <p class="kc-num-hero"><Num value={S.progress?.freed ?? 0} duration={900} /><span class="kc-num-hero__unit">libérés</span></p>
     </div>
     <div class="k-progress-row kc-run__bar">
-      <span class="k-progress-row__label k-shimmer k-shimmer--strong">{measuring ? 'Mesure du disque' : S.progress?.label ?? 'Préparation'}…</span>
+      <span class="k-progress-row__label k-shimmer k-shimmer--strong">{label}…</span>
       <div class="k-progress" role="progressbar" aria-label="Progression du nettoyage" aria-valuemin="0" aria-valuemax="100" aria-valuenow={total ? Math.round((done / total) * 100) : 0}
         style:--k-progress={total ? done / total : 0}><div class="k-progress__bar"></div></div>
       <span class="k-progress-row__value">{Math.min(done, total)}/{total}</span>
@@ -55,10 +84,11 @@
     <p class="kc-run__note kc-run__note--strong"><Icon name="triangle-alert" />Ne ferme pas l’application pendant le nettoyage.</p>
   </div>
 </div>
+{/if}
 
 <style>
   .kc-run { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: var(--space-6); background: var(--scrim-dim); -webkit-backdrop-filter: blur(var(--blur-xs)); backdrop-filter: blur(var(--blur-xs)); }
-  .kc-run__card { width: min(30rem, 100%); max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-6) var(--space-6) var(--space-5); }
+  .kc-run__card { position: relative; width: min(30rem, 100%); max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-6) var(--space-6) var(--space-5); }
   .kc-run__hero { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; }
   .kc-run__hero .kc-num-hero { margin: 0; }
   .kc-run__icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--radius-xl); background: var(--accent-subtle); color: var(--accent); }
@@ -77,4 +107,14 @@
   .kc-run__note--strong { color: var(--ink); }
   .kc-run__note--strong :global(.k-icon) { color: var(--warning); }
   .kc-run__note + .kc-run__note { margin-top: calc(-1 * var(--space-2)); }
+  .kc-run__reduce { position: absolute; top: var(--space-3); right: var(--space-3); }
+  .kc-mini { width: min(19rem, calc(100vw - 2 * var(--space-4))); display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-3) var(--space-4) var(--space-4); }
+  .kc-mini__head { display: flex; align-items: center; gap: var(--space-3); }
+  .kc-mini__icon { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-lg); background: var(--accent-subtle); color: var(--accent); }
+  .kc-mini__icon :global(.k-icon) { --k-icon-size: 16px; }
+  .kc-mini__text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+  .kc-mini__text strong { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .kc-mini__text span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .kc-mini__bar { display: flex; align-items: center; gap: var(--space-3); padding-right: var(--space-1); font-size: 12px; color: var(--ink-tertiary); font-variant-numeric: tabular-nums; }
+  .kc-mini__bar .k-progress { flex: 1; }
 </style>

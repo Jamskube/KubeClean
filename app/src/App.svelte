@@ -17,6 +17,8 @@
   import Confirm from './Confirm.svelte';
   import Running from './Running.svelte';
   import Palette from './Palette.svelte';
+  import RailPreview from './RailPreview.svelte';
+  import SidebarSummary from './SidebarSummary.svelte';
 
   S.start();
 
@@ -33,6 +35,40 @@
     { id: 'dark', icon: 'moon', label: 'Thème sombre' },
     { id: 'system', icon: 'monitor', label: 'Thème du système' },
   ];
+  const currentView = $derived(NAV.find((n) => n.id === S.view) ?? { label: 'Résultat du nettoyage', icon: 'circle-check' });
+  let returningFocus = false;
+  const previewTrigger = (id) => document.querySelector(`[data-rail-view="${id}"]`);
+  function closePreviews(except) {
+    for (const n of NAV) if (n.id !== except) window.Kube?.get(previewTrigger(n.id), 'hover-card')?.close();
+  }
+  // Kube restaure aussi l’état mémorisé au démarrage, sans émettre open/close.
+  function trackSidebar(node) {
+    const sync = () => {
+      S.sidebarOpen = node.dataset.state !== 'collapsed';
+      if (S.sidebarOpen) closePreviews();
+    };
+    const observer = new MutationObserver(sync);
+    observer.observe(node, { attributes: true, attributeFilter: ['data-state'] });
+    sync();
+    return () => observer.disconnect();
+  }
+  function previewOpen(e, id) {
+    if (S.sidebarOpen || returningFocus || (S.busy === 'clean' && !S.runMini) || document.querySelector('dialog[open]')) { e.preventDefault(); return; }
+    closePreviews(id);
+  }
+  function closePreview(id, focus = false) {
+    returningFocus = true;
+    window.Kube?.get(previewTrigger(id), 'hover-card')?.close();
+    if (focus) previewTrigger(id)?.focus({ preventScroll: true });
+    returningFocus = false;
+  }
+  function previewKey(e, id) {
+    if (S.sidebarOpen) return;
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    window.Kube?.get(e.currentTarget, 'hover-card')?.open();
+    document.querySelector(`#preview-${id}:popover-open button:not(:disabled), #preview-${id}:popover-open input:not(:disabled)`)?.focus();
+  }
 
   let scroller = $state();
   // category bars stretch from 0 on the first frame, then follow their value
@@ -40,6 +76,7 @@
   onMount(() => requestAnimationFrame(() => (armed = true)));
 
   async function go(view, cat) {
+    closePreviews();
     S.view = view;
     if (view !== 'clean') S.panel = null;
     await tick();
@@ -56,12 +93,11 @@
     }
     if (S.busy === 'clean') return S.progress?.label ? `Nettoyage… ${S.progress.label}` : 'Nettoyage…';
     if (!S.scan) return 'En attente du moteur';
-    return S.total > 0
-      ? `Prêt · ${fmt(S.total)} prêts à partir · analysé en ${sec} s`
-      : `Prêt · ${fmt(S.found)} trouvés · analysé en ${sec} s`;
+    return `Analyse terminée · ${sec} s`;
   });
 
   function onKey(e) {
+    if (e.defaultPrevented) return;
     if (e.key === 'Escape' && S.panel && !document.querySelector('dialog[open]')) { S.panel = null; return; }
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= '1' && e.key <= '6') { e.preventDefault(); go(NAV[Number(e.key) - 1].id); }
   }
@@ -72,18 +108,9 @@
 <div class="k-app" data-view={S.view} data-busy={S.busy} data-scanned={!!S.scan}>
   <header class="k-titlebar kc-titlebar">
     <div class="k-titlebar__group">
-      <button class="k-toolbar__btn" type="button" data-kube-toggle="#sidebar" data-kube-peek="#sidebar" aria-label="Afficher ou masquer la barre latérale"><Icon name="panel-left" /></button>
-      <span class="kc-brand"><Icon name="broom-sparkles" /><span>KubeClean</span></span>
+      <button class="k-toolbar__btn" type="button" data-kube-toggle="#sidebar" aria-label="Afficher ou masquer la barre latérale" onclick={() => closePreviews()}><Icon name="panel-left" /></button>
     </div>
-    <div class="k-titlebar__title kc-status">
-      {#key S.busy}
-        <span class="k-status-pill kc-status__pill" class:kc-status__pill--live={!!S.busy} role="status" in:fade={{ duration: dur(200) }}>
-          {#if S.busy}<span class="k-dot-pulse" style:--k-dot-size="6px" style:--k-dot-color="var(--accent)"></span>
-          {:else if S.scan}<span class="k-pop kc-status__check"><Icon name="circle-check" /></span>{/if}
-          <span class="k-status-pill__label">{status}</span>
-        </span>
-      {/key}
-    </div>
+    <div class="k-titlebar__title"></div>
     <div class="k-titlebar__group">
       <div class="k-seg k-seg--xs kc-theme" data-kube="segmented" data-kube-value={S.theme} aria-label="Thème" use:kubeOn={{ change: (e) => S.setTheme(e.detail.value) }}>
         <span class="k-seg__thumb" aria-hidden="true"></span>
@@ -96,19 +123,23 @@
   </header>
 
   <div class="k-app__body">
-    <nav class="k-sidebar" id="sidebar" data-kube="sidebar" data-kube-key="kubeclean:sidebar" data-kube-default="275" data-state={S.sidebarOpen ? 'open' : 'collapsed'} aria-label="Navigation"
-      use:kubeOn={{ open: () => (S.sidebarOpen = true), close: () => (S.sidebarOpen = false) }}>
+    <nav class="kc-rail" aria-label="Accès rapide">
+      {#each NAV as n (n.id)}
+        <button class="k-toolbar__btn kc-rail__button" class:kc-rail__settings={n.id === 'settings'} type="button"
+          aria-label={n.label} aria-current={S.view === n.id ? 'page' : undefined}
+          data-rail-view={n.id} data-kube="hover-card" data-kube-target="#preview-{n.id}" data-kube-side="right" data-kube-align="start" data-kube-offset="8" data-kube-delay="220" data-kube-close-delay="250"
+          aria-controls="preview-{n.id}" aria-haspopup={S.sidebarOpen ? undefined : 'dialog'} aria-expanded="false"
+          use:kubeOn={{ open: (e) => previewOpen(e, n.id) }} onkeydown={(e) => previewKey(e, n.id)} onclick={() => go(n.id)}><Icon name={n.icon} /></button>
+      {/each}
+    </nav>
+    <div class="kc-workspace">
+    <aside class="k-sidebar" id="sidebar" data-kube="sidebar" data-kube-key="kubeclean:sidebar" data-kube-default="275" data-state="open" aria-label="Mon espace" {@attach trackSidebar}>
       <div class="k-sidebar__inner">
-        <div class="k-sidebar__header kc-nav">
-          {#each NAV as n (n.id)}
-            <button class="k-nav-row" type="button" data-view={n.id} aria-current={S.view === n.id ? 'page' : undefined} onclick={() => go(n.id)}>
-              <span class="k-nav-row__icon"><Icon name={n.icon} /></span>
-              <span class="k-nav-row__label">{n.label}</span>
-              {#if n.id === 'history' && S.history.length}<span class="k-nav-row__meta">{S.history.length}</span>{/if}
-            </button>
-          {/each}
+        <div class="k-sidebar__toolbar kc-sidebar-heading">
+          <span>Mon espace</span>
         </div>
         <div class="k-sidebar__scroll k-scrollbar">
+          <SidebarSummary />
           <section class="k-nav-section" data-kube="nav-section" data-kube-key="kubeclean:cats">
             <div class="k-nav-section__title">
               <button class="k-nav-section__toggle" type="button" aria-expanded="true"><span class="k-nav-section__label">Catégories</span><svg class="k-icon k-nav-section__chevron" aria-hidden="true"><use href="kube/icons/kube-icons.svg#chevron-down"></use></svg></button>
@@ -145,17 +176,26 @@
                 style:--k-progress-color={d.free / d.total < 0.1 ? 'var(--danger)' : 'var(--ink-tertiary)'}><div class="k-progress__bar"></div></div>
             </div>
           {/each}
-          {#if S.version}<span class="kc-version k-micro">moteur {S.version}</span>{/if}
+          {#if S.drives.length > 3}<button class="k-btn k-btn--ghost k-btn--sm kc-drives__more" type="button" onclick={async () => { await go('dashboard'); document.getElementById('storage-title')?.scrollIntoView({ block: 'start' }); }}>Voir les {S.drives.length} lecteurs<Icon name="arrow-right" /></button>{/if}
+          {#if S.appVersion}<span class="kc-version k-micro">KubeClean {S.appVersion}<span>Local · Windows</span></span>{/if}
         </div>
       </div>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Kube resizer: keyboard-resizable separator) -->
       <div class="k-resizer k-resizer--end" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Redimensionner la barre latérale"></div>
-    </nav>
+    </aside>
 
     <main class="k-app__main">
       <div class="k-pane">
         <div class="k-split">
           <div class="k-split__main">
+            <header class="kc-pane-header">
+              <div class="kc-pane-header__title"><Icon name={currentView.icon} /><span>{currentView.label}</span></div>
+              <span class="kc-status__pill" class:kc-status__pill--live={!!S.busy} role="status">
+                {#if S.busy}<span class="k-dot-pulse" style:--k-dot-size="6px" style:--k-dot-color="var(--accent)"></span>
+                {:else if S.scan}<Icon name="circle-check" />{/if}
+                <span class="kc-pane-header__status">{status}</span>
+              </span>
+            </header>
             <div class="k-pane__fade" aria-hidden="true"></div>
             <div class="k-pane__scroll k-scrollbar k-scrollbar--stable-both" bind:this={scroller}>
               {#key S.view}
@@ -179,11 +219,15 @@
         </div>
       </div>
     </main>
+    </div>
   </div>
 
   {#if S.busy === 'clean'}
-    <div class="kc-running" in:fade={{ duration: dur(200) }} out:fade={{ duration: dur(140) }}><Running /></div>
+    <div class="kc-running" class:kc-running--mini={S.runMini} in:fade={{ duration: dur(200) }} out:fade={{ duration: dur(140) }}><Running /></div>
   {/if}
   <Confirm />
   <Palette />
+  {#each NAV as n (n.id)}
+    <RailPreview page={n} navigate={() => go(n.id)} close={(focus) => closePreview(n.id, focus)} />
+  {/each}
 </div>

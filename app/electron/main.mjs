@@ -84,16 +84,16 @@ ipcMain.handle('pick-folder', async (e) => {
 // Mica (Windows 11 22H2+, build 22621), dark theme only, like Doku: the DWM paints it
 // under the transparent chrome (title bar, sidebar); content panes stay opaque.
 const MICA_OK = process.platform === 'win32' && Number(os.release().split('.')[2]) >= 22621;
-const mica = () => MICA_OK && nativeTheme.shouldUseDarkColors;
+const mica = () => MICA_OK && nativeTheme.shouldUseDarkColors && !process.env.KC_MOCK;
 const overlay = () => (nativeTheme.shouldUseDarkColors
-  ? { color: mica() ? '#00000000' : '#000000', symbolColor: '#ffffff', height: 44 }
-  : { color: '#f9f9f9', symbolColor: '#000000', height: 44 });
+  ? { color: mica() ? '#00000000' : '#212121', symbolColor: '#ffffff', height: 44 }
+  : { color: '#ededed', symbolColor: '#000000', height: 44 });
 
 function createWindow() {
   win = new BrowserWindow({
     width: 1200, height: 800, minWidth: 880, minHeight: 560,
     title: 'KubeClean',
-    icon: path.join(here, '..', 'public', 'icon.png'),
+    icon: path.join(DIST, 'icon.png'),
     backgroundColor: overlay().color,
     // set before the first show: applied later, the DWM can keep an opaque backdrop
     backgroundMaterial: mica() ? 'mica' : 'none',

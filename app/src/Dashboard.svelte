@@ -1,327 +1,193 @@
 <script>
-  import { fly } from 'svelte/transition';
-  import { flip } from 'svelte/animate';
-  import { tick, onMount } from 'svelte';
-  import { S, CATS, catColor } from './lib/state.svelte.js';
+  import { tick } from 'svelte';
+  import { S, CATS, catColor, appName } from './lib/state.svelte.js';
   import { fmt, date, drive, plural } from './lib/fmt.js';
-  import { dur } from './lib/ui/kube.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
 
   const scanning = $derived(S.busy === 'scan');
-  /** rules shown: the live ones while scanning, the last scan otherwise */
   const rules = $derived(scanning ? S.live : S.rules);
-  const found = $derived(rules.reduce((a, r) => a + r.size, 0));
-  /** what the primary button cleans: the safe defaults (live during the scan, the current selection after) */
-  const safe = $derived(scanning || !S.scan ? S.defaultSize : S.total);
-  const toReview = $derived(Math.max(0, found - safe));
-  const canClean = $derived(!S.busy && !!S.scan && S.defaultSize > 0);
-
-  const cat = (id) => CATS.find((c) => c.id === id) ?? CATS[0];
-  const catRows = $derived(CATS.map((c) => {
-    const rs = rules.filter((r) => r.cat === c.id);
-    return { ...c, total: rs.reduce((a, r) => a + r.size, 0), sel: scanning ? 0 : rs.reduce((a, r) => a + S.selSize(r), 0) };
-  }));
-  const top = $derived([...rules].filter((r) => r.size > 0).sort((a, b) => b.size - a.size).slice(0, 5));
-  const badge = (r) => (r.needsAdmin ? ['k-badge--warning', 'admin', null] : S.state(r) === 'on' ? ['k-badge--success', 'coché', null] : ['', 'non coché', 'Jamais coché d’office : à toi de décider']);
-
-  const d = $derived(S.systemDrive);
-  const usedPct = $derived(d ? (1 - d.free / d.total) * 100 : 0);
-  const freedPct = $derived(d && !scanning ? Math.min(usedPct, (S.total / d.total) * 100) : 0);
-  const afterPct = $derived(usedPct - freedPct);
-  const afterFree = $derived(d ? d.free + S.total : 0);
-
-  const hist = $derived(S.history);
-  const gained = $derived(hist.reduce((a, h) => a + Math.max(h.diskGain, 0), 0));
-  const spark = $derived.by(() => {
-    const v = hist.map((h) => Math.max(h.diskGain, 0));
-    const max = Math.max(1, ...v);
-    if (v.length === 1) v.push(v[0]);
-    return v.map((x, i) => `${((i / (v.length - 1)) * 120).toFixed(1)},${(30 - (x / max) * 28).toFixed(1)}`).join(' ');
-  });
-
+  const found = $derived(rules.reduce((sum, r) => sum + r.size, 0));
+  // Le raccourci rétablit les recommandations : le montant décrit cette action.
+  const recommended = $derived(S.defaultSize);
+  const review = $derived(Math.max(0, found - recommended));
+  const cats = $derived(CATS.map((c) => ({ ...c, size: rules.filter((r) => r.cat === c.id).reduce((sum, r) => sum + r.size, 0) })));
+  const top = $derived([...rules].filter((r) => r.size > 0).sort((a, b) => b.size - a.size).slice(0, 4));
+  const openApps = $derived([...new Set(rules.filter((r) => r.size > 0).flatMap((r) => r.blockedBy ?? []))]);
   const pct = $derived(S.progress?.total ? S.progress.done / S.progress.total : 0);
-
-  const items = $derived(rules.reduce((a, r) => a + (r.count ?? 0), 0));
-  const secs = $derived((S.scanMs / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 }));
-  const kpis = $derived([
-    { id: 'found', label: 'Trouvés', value: found, kind: 'bytes', sub: `dans ${plural(catRows.filter((c) => c.total > 0).length, 'catégorie', 'catégories')}` },
-    { id: 'review', label: 'À vérifier', value: toReview, kind: 'bytes', sub: 'jamais coché d’office' },
-    { id: 'items', label: 'Éléments', value: items, kind: 'int', sub: `dans ${plural(rules.filter((r) => r.size > 0).length, 'règle', 'règles')}` },
-    { id: 'time', label: 'Analyse', text: scanning ? null : `${secs}\u00a0s`, sub: scanning ? 'en cours' : S.scan ? `le ${date(S.scan.at)}` : '' },
-  ]);
-
-  // bars start at 0 and stretch to their value on the first frame (and again whenever the value changes)
-  let armed = $state(false);
-  onMount(() => requestAnimationFrame(() => (armed = true)));
+  const d = $derived(S.systemDrive);
+  const usedPct = $derived(d?.total ? Math.max(0, Math.min(100, (1 - d.free / d.total) * 100)) : 0);
 
   async function toCat(id) {
-    S.view = 'clean';
+    S.cleanFilter = 'all'; S.view = 'clean';
     await tick();
-    document.getElementById(`cat-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById(`cat-${id}`)?.scrollIntoView({ block: 'start' });
   }
-  function openRule(id) { S.view = 'clean'; S.panel = id; }
-
-  const SAFETY = [
-    { icon: 'shield-check', title: 'Revérifié avant d’y toucher', text: 'Chaque élément est recontrôlé juste avant la suppression ; ce qui a changé depuis l’analyse reste en place.' },
-    { icon: 'archive', title: 'Tes fichiers vont à la Corbeille', text: 'Gros fichiers et vieux téléchargements ne sont jamais cochés d’office et restent récupérables.' },
-    { icon: 'lock', title: 'Admin via l’UAC de Windows', text: 'Les tâches système passent par l’invite d’autorisation habituelle, jamais en silence.' },
-  ];
+  function inspect(id) { S.cleanFilter = 'all'; S.view = 'clean'; S.panel = id; }
 </script>
 
+<header class="kc-overview-head">
+  <div><h1>Vue d’ensemble</h1><p>{scanning ? 'Analyse en cours. Aucun fichier n’est modifié.' : S.scan ? `Dernière analyse · ${date(S.scan.at)}` : 'Un état des lieux, avant de faire de la place.'}</p></div>
+  <button class="k-btn k-btn--outline" type="button" disabled={!!S.busy} onclick={() => S.runScan()}><Icon name="refresh-cw" />Actualiser</button>
+</header>
+
 {#if !S.scan && !scanning}
-  <div class="k-empty k-empty--page">
-    <div class="k-empty__body">
-      <div class="k-empty__art k-empty__art--tile"><Icon name="scan-search" /></div>
-      <div class="k-empty__text">
-        <h2 class="k-empty__title">Aucune analyse pour l’instant</h2>
-        <p class="k-empty__desc">L’analyse ne modifie rien : elle mesure ce qui peut être récupéré sur ton disque.</p>
-      </div>
-      <div class="k-empty__actions"><button class="k-btn k-btn--primary" type="button" onclick={() => S.runScan()} disabled={!!S.busy}><Icon name="scan-search" />Analyser</button></div>
-    </div>
-  </div>
+  <div class="k-empty k-empty--page"><div class="k-empty__body">
+    <img src="icon.png" width="80" height="80" alt="" />
+    <div class="k-empty__text"><h2 class="k-empty__title">Fais le point sur ton espace</h2><p class="k-empty__desc">Repère les caches, les fichiers temporaires et les dossiers volumineux. Tu choisis ensuite ce qui peut partir.</p></div>
+    <button class="k-btn k-btn--primary" type="button" disabled={!!S.busy} onclick={() => S.runScan()}><Icon name="scan-search" />Analyser mon ordinateur</button>
+  </div></div>
 {:else}
-  <div class="kc-dash">
-    <!-- hero -->
-    <section class="k-card k-card--full kc-card kc-hero" aria-labelledby="kc-hero-title">
-      <div class="kc-hero__body">
-        <h1 id="kc-hero-title" class="kc-hero__headline">
-          <Num value={safe} class="kc-num-hero" />
-          <span class="kc-num-hero__unit">{scanning ? 'trouvés jusqu’ici, prêts à partir' : 'prêts à partir'}</span>
-        </h1>
-        <p class="kc-hero__sub">
-          {#if scanning}
-            <span class="k-shimmer k-shimmer--strong" role="status">Analyse en cours…</span> · <Num value={found} /> trouvés jusqu’ici
-          {:else}
-            sur <Num value={found} /> trouvés
-            {#if toReview > 0}
-              <span class="kc-hero__dot">·</span>
-              <button class="k-btn k-btn--ghost k-btn--xs kc-hero__review" type="button" onclick={() => { S.cleanFilter = 'review'; S.view = 'clean'; }}><span><Num value={toReview} /> à vérifier</span><Icon name="arrow-right" /></button>
-            {/if}
-          {/if}
-        </p>
-        {#if scanning}
-          <div class="kc-hero__scan">
-            <div class="k-progress-row kc-hero__progress">
-              <span class="k-progress-row__label">{S.progress?.label ?? 'Préparation'}</span>
-              <div class="k-progress" role="progressbar" aria-label="Analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(pct * 100)} style:--k-progress={pct}><div class="k-progress__bar"></div></div>
-              <span class="k-progress-row__value">{S.progress ? `${S.progress.done}/${S.progress.total}` : '…'}</span>
-            </div>
-            <button class="k-btn k-btn--ghost k-btn--sm" type="button" onclick={() => S.cancel()}>Annuler</button>
-          </div>
-        {:else}
-          <div class="kc-hero__actions">
-            <button class="k-btn k-btn--primary k-btn--lg" type="button" data-action="clean" data-kube="press" disabled={!canClean} onclick={() => S.quickClean()}><Icon name="sparkles" />Nettoyer {fmt(S.defaultSize)}</button>
-            <button class="k-btn k-btn--lg" type="button" data-kube="press" onclick={() => { S.cleanFilter = 'all'; S.view = 'clean'; }}>Passer en revue<Icon name="arrow-right" /></button>
-            <button class="k-btn k-btn--ghost k-btn--icon k-btn--lg" type="button" aria-label="Analyser à nouveau" data-kube="tooltip press" disabled={!!S.busy} onclick={() => S.runScan()}><Icon name="refresh-cw" /></button>
-          </div>
-          <p class="kc-hero__caption">Caches et temporaires que les applications recréent · tu confirmes avant</p>
-        {/if}
-      </div>
-    </section>
-
-    <!-- KPIs -->
-    <div class="kc-kpis">
-      {#each kpis as k (k.id)}
-        <article class="k-card k-card--full kc-kpi">
-          <span class="kc-stat__label kc-kpi__label">{k.label}</span>
-          {#if k.kind}<Num value={k.value} kind={k.kind} class="kc-stat__num kc-kpi__num" />
-          {:else if k.text}<span class="kc-stat__num kc-kpi__num">{k.text}</span>
-          {:else}<span class="kc-stat__num kc-kpi__num k-shimmer">…</span>{/if}
-          <span class="kc-kpi__sub">{k.sub}</span>
-        </article>
-      {/each}
-    </div>
-
-    <!-- safety band -->
-    <ul class="kc-safety" aria-label="Ce que KubeClean garantit">
-      {#each SAFETY as s (s.icon)}
-        <li data-kube="tooltip" data-kube-tooltip={s.text} data-kube-size="lg"><Icon name={s.icon} /><strong>{s.title}</strong></li>
-      {/each}
-    </ul>
-
-    <!-- system drive -->
-    {#if d}
-      <section class="k-card k-card--full kc-card kc-drivecard" aria-labelledby="kc-drive-title">
-        <header class="kc-card__head"><h2 id="kc-drive-title" class="kc-card__title"><Icon name="hard-drive" />Disque {drive(d.root)}</h2></header>
-        <div class="kc-drivecard__body">
-          <div class="kc-ring">
-            <svg class="k-donut kc-ring__svg" viewBox="0 0 24 24" style:--k-progress={usedPct} style:--kc-seg={freedPct} style:--kc-seg-start={afterPct} role="img" aria-label="{Math.round(usedPct)} % utilisés{freedPct ? `, ${Math.round(afterPct)} % après nettoyage` : ''}">
-              <circle class="k-donut__track" cx="12" cy="12" r="11" />
-              <circle class="k-donut__arc" cx="12" cy="12" r="11" pathLength="100" />
-              <circle class="kc-ring__freed" cx="12" cy="12" r="11" pathLength="100" />
-            </svg>
-            <div class="kc-ring__center">
-              <span class="kc-ring__pct"><Num value={usedPct} kind="percent" />{#if freedPct}<span class="kc-ring__arrow" aria-hidden="true">→</span><Num value={afterPct} kind="percent" class="kc-ring__after" />{/if}</span>
-              <span class="kc-stat__label">utilisés</span>
-            </div>
-          </div>
-          <dl class="kc-facts">
-            <div><dt class="kc-stat__label">Libre aujourd’hui</dt><dd><Num value={d.free} class="kc-stat__num" /> <span class="kc-dim">sur {fmt(d.total)}</span></dd></div>
-            <div><dt class="kc-stat__label"><span class="kc-swatch"></span>Après nettoyage</dt><dd>{#if scanning}<span class="kc-stat__num">—</span>{:else}<Num value={afterFree} class="kc-stat__num" /> <span class="kc-dim">libres</span>{/if}</dd></div>
-          </dl>
+  <div class="kc-overview">
+    <section class="k-card k-card--full kc-recommended" aria-labelledby="recommended-title">
+      <div class="kc-recommended__heading"><span class="kc-feature-icon"><Icon name="sparkles" /></span><h2 id="recommended-title">Nettoyage recommandé</h2></div>
+      <div class="kc-recommended__amount"><Num value={recommended} /><span>{scanning ? 'repérés pour l’instant' : 'à nettoyer'}</span></div>
+      <p class="kc-recommended__desc">Caches, temporaires et fichiers générés.<br />Tes fichiers personnels restent à ta main.</p>
+      {#if scanning}
+        <div class="kc-scan" aria-live="polite">
+          <div class="kc-scan__label"><span>{S.progress?.label ?? 'Préparation…'}</span><span>{Math.round(pct * 100)} %</span></div>
+          <div class="k-progress" role="progressbar" aria-label="Analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(pct * 100)} style:--k-progress={pct}><div class="k-progress__bar"></div></div>
+          <button class="k-btn k-btn--ghost k-btn--sm" type="button" onclick={() => S.cancel()}>Annuler l’analyse</button>
         </div>
-      </section>
-    {/if}
-
-    <!-- breakdown -->
-    <section class="k-card k-card--full kc-card kc-breakdown" aria-labelledby="kc-bd-title">
-      <header class="kc-card__head"><h2 id="kc-bd-title" class="kc-card__title"><Icon name="chart-bar" />Répartition<span class="kc-card__meta"><Num value={found} /></span></h2></header>
-      <div class="kc-stack" role="img" aria-label="Octets trouvés par catégorie">
-        {#each catRows as c (c.id)}<span style:flex={armed ? c.total : 0} style:background={catColor(c.id)} title="{c.label} : {fmt(c.total)}"></span>{/each}
-        {#if !found}<span class="kc-stack__empty"></span>{/if}
-      </div>
-      <div class="kc-legend__head k-micro" aria-hidden="true"><span>cochés</span><span>trouvés</span></div>
-      <ul class="kc-legend">
-        {#each catRows as c, i (c.id)}
-          <li class="k-reveal kc-legend__row" in:fly={{ y: 6, duration: dur(220), delay: i * 25 }}>
-            <span class="k-chart__marker" style:background={catColor(c.id)}></span>
-            <Icon name={c.icon} />
-            <span class="kc-legend__label k-reveal__label">{c.label}</span>
-            <span class="kc-legend__sel">{#if scanning}{:else if c.sel}<Num value={c.sel} />{:else if c.total}à vérifier{/if}</span>
-            <span class="kc-legend__found">{#if c.total}<Num value={c.total} />{:else}—{/if}</span>
-            <span class="k-reveal__item"><button class="k-btn k-btn--ghost k-btn--xs" type="button" onclick={() => toCat(c.id)}>voir<Icon name="chevron-right" /></button></span>
-          </li>
-        {/each}
-      </ul>
-    </section>
-
-    <!-- top 5 -->
-    <section class="k-card k-card--full kc-card kc-top" aria-labelledby="kc-top-title">
-      <header class="kc-card__head"><h2 id="kc-top-title" class="kc-card__title"><Icon name="trending-up" />Les plus gros postes</h2></header>
-      {#if top.length}
-        <ul class="k-list k-list--bleed">
-          {#each top as r (r.id)}
-            {@const [tone, label, tip] = badge(r)}
-            <li animate:flip={{ duration: dur(250) }} in:fly={{ y: 6, duration: dur(220) }}>
-              <button class="k-list__item" type="button" onclick={() => openRule(r.id)} disabled={scanning}>
-                <span class="k-list__media kc-tile" style:color={catColor(r.cat)}><Icon name={cat(r.cat).icon} /></span>
-                <span class="k-list__content"><span class="k-list__title">{r.title}</span><span class="k-list__desc">{r.hint || cat(r.cat).label}</span></span>
-                {#if !scanning}<span class="k-badge {tone}" data-kube={tip ? 'tooltip' : undefined} data-kube-tooltip={tip}>{label}</span>{/if}
-                <span class="k-list__meta kc-top__size"><Num value={r.size} /></span>
-              </button>
-            </li>
-          {/each}
-        </ul>
       {:else}
-        <p class="kc-dim kc-top__empty">{scanning ? 'Les résultats apparaissent au fil de l’analyse…' : 'Rien à signaler.'}</p>
+        <div class="kc-recommended__actions">
+          <button class="k-btn k-btn--primary k-btn--lg" type="button" data-action="clean" data-kube="press" disabled={!!S.busy || !recommended} onclick={() => S.quickClean()}><Icon name="sparkles" />Nettoyer {fmt(recommended)}</button>
+          <button class="k-btn k-btn--ghost k-btn--lg" type="button" onclick={() => { S.cleanFilter = 'all'; S.view = 'clean'; }}>Personnaliser<Icon name="arrow-right" /></button>
+        </div>
+        <span class="kc-confirm-note"><Icon name="shield-check" />Tu vérifies et confirmes avant toute suppression.</span>
       {/if}
     </section>
 
-    <!-- history glance -->
-    {#if hist.length}
-      <section class="k-card k-card--full k-card--interactive kc-card kc-hist">
-        <button class="k-pressable kc-hist__btn" type="button" onclick={() => (S.view = 'history')} aria-label="Ouvrir l’historique">
-          <span class="kc-card__head"><span class="kc-card__title"><Icon name="clock-arrow-left" />Historique<span class="kc-card__meta kc-hist__more">voir tout<Icon name="chevron-right" /></span></span></span>
-          <span class="kc-hist__grid">
-            <span class="kc-stat"><Num value={gained} class="kc-stat__num" /><span class="kc-stat__label">récupérés au total</span></span>
-            <span class="kc-stat"><Num value={hist.length} kind="int" class="kc-stat__num" /><span class="kc-stat__label">{hist.length > 1 ? 'nettoyages' : 'nettoyage'}</span></span>
-            <span class="kc-stat"><span class="kc-stat__num kc-stat__num--text">{date(hist.at(-1).at)}</span><span class="kc-stat__label">dernier nettoyage</span></span>
-            <svg class="kc-spark" viewBox="0 0 120 32" preserveAspectRatio="none" role="img" aria-label="Espace gagné à chaque nettoyage"><polyline points={spark} fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round" /></svg>
-          </span>
+    <section class="k-card k-card--full kc-storage" aria-labelledby="storage-title">
+      <div class="kc-section-heading"><h2 id="storage-title">Espace disque</h2><Icon name="hard-drive" /></div>
+      {#if d}
+        <div class="kc-storage__summary">
+          <div class="kc-ring">
+            <svg class="k-donut" viewBox="0 0 24 24" style:--k-progress={usedPct} role="img" aria-label="Disque {drive(d.root)} : {Math.round(usedPct)} % utilisés">
+              <circle class="k-donut__track" cx="12" cy="12" r="11" /><circle class="k-donut__arc" cx="12" cy="12" r="11" pathLength="100" />
+            </svg><span>{drive(d.root)}</span>
+          </div>
+          <div class="kc-storage__free"><Num value={d.free} /><span>libres sur {fmt(d.total)}</span><span class:kc-storage__warning={d.free / d.total < 0.1}>{d.free / d.total < 0.1 ? 'Espace bientôt saturé' : `${Math.round(usedPct)} % utilisés`}</span></div>
+        </div>
+      {/if}
+      <div class="kc-storage__drives">
+        {#each S.drives.filter((disk) => disk !== d) as disk (disk.root)}
+          <div class="kc-storage__drive"><Icon name="hard-drive" /><strong>{drive(disk.root)}</strong><span>{fmt(disk.free)} libres</span></div>
+        {/each}
+      </div>
+      <p class="kc-storage__note">Mesure actuelle. L’espace réellement récupéré sera mesuré après le nettoyage.</p>
+    </section>
+
+    <button class="kc-review" type="button" disabled={!!S.busy} onclick={() => { S.cleanFilter = 'review'; S.view = 'clean'; }}>
+      <Icon name="scan-eye" /><span class="kc-review__copy"><strong>À examiner avec toi</strong><span>Fichiers personnels, projets et opérations à choisir.</span></span>
+      <span class="kc-review__amount"><Num value={review} /><Icon name="arrow-right" /></span>
+    </button>
+
+    <section class="kc-breakdown" aria-labelledby="breakdown-title">
+      <div class="kc-section-heading"><h2 id="breakdown-title">Où se trouve l’espace à nettoyer</h2><span>{fmt(found)} repérés</span></div>
+      <div class="kc-stack" role="img" aria-label="Répartition des fichiers repérés par catégorie">
+        {#each cats as c (c.id)}{#if c.size}<span style:flex={c.size} style:background={catColor(c.id)} title="{c.label} : {fmt(c.size)}"></span>{/if}{/each}
+      </div>
+      {#each cats as c (c.id)}
+        <button class="kc-category" type="button" disabled={scanning} onclick={() => toCat(c.id)}>
+          <span class="kc-category__dot" style:background={catColor(c.id)}></span><Icon name={c.icon} />
+          <span class="kc-row-copy"><strong>{c.label}</strong><span>{c.blurb}</span></span><span class="kc-row-size">{c.size ? fmt(c.size) : '—'}</span><Icon name="chevron-right" />
         </button>
-      </section>
-    {/if}
+      {/each}
+    </section>
+
+    <section class="kc-priorities" aria-labelledby="priorities-title">
+      <div class="kc-section-heading"><h2 id="priorities-title">Les plus gros postes</h2></div>
+      {#each top as r (r.id)}
+        <button class="kc-priority" type="button" disabled={scanning} onclick={() => inspect(r.id)}>
+          <span class="kc-row-copy"><strong>{r.title}</strong><span>{r.needsAdmin ? 'Autorisation Windows requise' : r.toRecycle ? 'À choisir · vers la Corbeille' : r.perItem ? 'À examiner élément par élément' : r.default ? 'Inclus dans les recommandations' : 'À choisir manuellement'}</span></span>
+          <span class="kc-row-size">{fmt(r.size)}</span><Icon name="chevron-right" />
+        </button>
+      {/each}
+      {#if !top.length}<p class="kc-storage__note">{scanning ? 'Les résultats arrivent au fil de l’analyse…' : 'Rien à nettoyer dans les règles analysées.'}</p>{/if}
+      {#if openApps.length}
+        <div class="kc-apps-note"><Icon name="info" /><p><strong>{plural(openApps.length, 'application ouverte', 'applications ouvertes')}</strong><span>{openApps.map(appName).join(', ')}. Ferme-les puis actualise pour réévaluer leurs caches. Les fichiers verrouillés restent en place.</span></p></div>
+      {/if}
+    </section>
+    <div class="kc-trust"><Icon name="shield-check" /><p>Analyse en lecture seule · Éléments revérifiés avant suppression · Fichiers personnels vers la Corbeille</p></div>
   </div>
 {/if}
 
 <style>
-  .kc-dash { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-4); }
-  .kc-dash > * { grid-column: span 6; min-width: 0; }
-  @container kc-col (min-width: 760px) {
-    .kc-hero { grid-column: span 4; order: -2; }
-    .kc-drivecard { grid-column: span 2; order: -1; }
-    .kc-drivecard .kc-drivecard__body { flex-direction: column; align-items: stretch; gap: var(--space-5); }
-    .kc-drivecard .kc-ring { align-self: center; }
-    .kc-drivecard .kc-facts { gap: var(--space-4); min-width: 0; }
-    .kc-drivecard :global(.kc-stat__num) { font-size: 26px; }
-    .kc-breakdown { grid-column: span 3; }
-    .kc-top { grid-column: span 3; }
-    .kc-hist { grid-column: span 6; }
+  .kc-overview-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin: var(--space-2) 0 var(--space-6); }
+  .kc-overview-head h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.025em; }
+  .kc-overview-head p { margin: 6px 0 0; font-size: 13px; color: var(--ink-secondary); }
+  .kc-overview-head > button { flex: none; }
+  .kc-overview { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: var(--space-6); }
+  .kc-overview > * { min-width: 0; }
+  h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.015em; }
+  .kc-recommended, .kc-storage { padding: var(--space-6); }
+  .kc-recommended { display: flex; flex-direction: column; align-items: flex-start; }
+  .kc-recommended__heading { display: flex; align-items: center; gap: var(--space-3); }
+  .kc-feature-icon { width: 32px; height: 32px; border-radius: var(--radius-lg); display: grid; place-items: center; color: var(--link); background: var(--accent-subtle); }
+  .kc-recommended__amount { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; margin-top: var(--space-5); }
+  .kc-recommended__amount :global(.num) { font-size: 48px; font-weight: 600; letter-spacing: -.035em; line-height: 1.15; }
+  .kc-recommended__amount > span { font-size: 15px; color: var(--ink-secondary); }
+  .kc-recommended__desc { margin: var(--space-3) 0 var(--space-5); font-size: 13px; line-height: 1.65; color: var(--ink-secondary); }
+  .kc-recommended__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; }
+  .kc-confirm-note { display: flex; align-items: center; gap: 6px; margin-top: var(--space-3); font-size: 12px; color: var(--ink-secondary); }
+  .kc-confirm-note :global(.k-icon) { flex: none; width: 14px; }
+  .kc-section-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+  .kc-section-heading > span, .kc-section-heading > :global(.k-icon) { color: var(--ink-secondary); font-size: 12px; flex: none; }
+  .kc-storage { display: flex; flex-direction: column; }
+  .kc-storage__summary { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-3) 0 var(--space-5); }
+  .kc-ring { position: relative; width: 94px; height: 94px; flex: none; display: grid; place-items: center; }
+  .kc-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; stroke-width: 1.6; color: var(--ink-secondary); }
+  .kc-ring > span { font-size: 18px; font-weight: 600; }
+  .kc-storage__free { min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-secondary); }
+  .kc-storage__free :global(.num) { font-size: 25px; font-weight: 600; color: var(--ink); letter-spacing: -.025em; }
+  .kc-storage__warning { color: var(--warning); }
+  .kc-storage__drives { display: flex; flex-direction: column; gap: var(--space-2); }
+  .kc-storage__drive { display: flex; align-items: center; gap: var(--space-2); font-size: 12px; }
+  .kc-storage__drive > span { margin-inline-start: auto; color: var(--ink-secondary); }
+  .kc-storage__drive > :global(.k-icon) { color: var(--ink-secondary); }
+  .kc-storage__note { font-size: 12px; line-height: 1.6; color: var(--ink-secondary); margin: auto 0 0; padding-top: var(--space-4); }
+  .kc-review { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-4); text-align: left; padding: var(--space-4) var(--space-5); border: 1px solid var(--border); background: var(--fill-subtle); border-radius: var(--radius-xl); color: var(--ink); transition: background var(--duration-basic); }
+  .kc-review:hover:not(:disabled) { background: var(--fill-secondary); }
+  .kc-review:disabled { cursor: default; }
+  .kc-review > :global(.k-icon) { color: var(--ink-secondary); flex: none; }
+  .kc-review__copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .kc-review__copy strong { font-size: 13px; font-weight: 600; }
+  .kc-review__copy > span { font-size: 12px; color: var(--ink-secondary); }
+  .kc-review__amount { display: flex; gap: var(--space-4); align-items: center; font-size: 18px; font-weight: 600; white-space: nowrap; }
+  .kc-review__amount > :global(.k-icon) { color: var(--ink-secondary); }
+  .kc-breakdown, .kc-priorities { padding-block: var(--space-2); }
+  .kc-stack { height: 6px; border-radius: var(--radius-full); display: flex; gap: 3px; overflow: hidden; background: var(--fill-secondary); margin-bottom: var(--space-3); }
+  .kc-stack > span { min-width: 2px; }
+  .kc-category, .kc-priority { width: 100%; display: flex; align-items: center; gap: var(--space-3); background: transparent; border: 0; border-radius: var(--radius-md); padding: 11px 4px; text-align: left; color: var(--ink); transition: background var(--duration-basic); }
+  .kc-category:hover:not(:disabled), .kc-priority:hover:not(:disabled) { background: var(--fill-secondary); }
+  .kc-category:disabled, .kc-priority:disabled { cursor: default; }
+  .kc-category + .kc-category, .kc-priority + .kc-priority { border-top: 1px solid var(--border-light); }
+  .kc-category > :global(.k-icon), .kc-priority > :global(.k-icon) { color: var(--ink-secondary); flex: none; width: 14px; }
+  .kc-category__dot { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+  .kc-row-copy { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  .kc-row-copy strong { font-size: 13px; font-weight: 510; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kc-row-copy > span { font-size: 12px; color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kc-row-size { font-size: 13px; white-space: nowrap; font-weight: 510; }
+  .kc-apps-note { display: flex; align-items: flex-start; gap: var(--space-2); padding-top: var(--space-4); margin-top: var(--space-3); border-top: 1px solid var(--border); color: var(--ink-secondary); }
+  .kc-apps-note > :global(.k-icon) { margin-top: 2px; flex: none; }
+  .kc-apps-note p { margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.6; }
+  .kc-apps-note strong { font-weight: 510; color: var(--ink); }
+  .kc-trust { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-2); border-top: 1px solid var(--border); padding-top: var(--space-4); color: var(--ink-secondary); }
+  .kc-trust p { margin: 0; font-size: 12px; }
+  .kc-trust :global(.k-icon) { flex: none; }
+  .kc-scan { width: 100%; margin-top: auto; }
+  .kc-scan__label { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--ink-secondary); margin-bottom: 8px; }
+  .kc-scan__label span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kc-scan > button { margin-top: 8px; }
+  @container kc-col (max-width: 690px) {
+    .kc-overview { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+    .kc-storage__summary { margin-block: 0 var(--space-3); }
+    .kc-ring { width: 72px; height: 72px; }
+    .kc-storage__drives { flex-direction: row; flex-wrap: wrap; gap: 8px 24px; }
+    .kc-storage__drive { gap: 8px; }
+    .kc-storage__drive > span { margin-left: 8px; }
+    .kc-overview-head h1 { font-size: 24px; }
+    .kc-review__copy > span { line-height: 1.5; }
   }
-
-  .kc-card { padding: var(--space-6); }
-  .kc-card__head { display: flex; align-items: center; margin-bottom: var(--space-4); }
-  .kc-card__head .kc-card__title { flex: 1; }
-  .kc-dim { color: var(--ink-secondary); font-size: 13px; font-weight: 400; }
-  .kc-tile { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: var(--radius-xl); background: var(--fill-secondary); }
-
-  /* hero */
-  .kc-hero { position: relative; isolation: isolate; overflow: hidden; padding: 48px 40px 36px; }
-  .kc-hero__headline { gap: var(--space-2) 12px; }
-  .kc-hero__headline :global(.kc-num-hero__unit) { margin-inline-start: 0; }
-  .kc-hero__body { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); max-width: 44rem; }
-  .kc-hero__headline { display: flex; flex-wrap: wrap; align-items: baseline; margin: 0; }
-  .kc-hero__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-1); margin: var(--space-1) 0 0; font-size: 15px; color: var(--ink-secondary); }
-  .kc-hero__sub :global(.num) { color: var(--ink); font-weight: 510; }
-  .kc-hero__dot { color: var(--ink-tertiary); }
-  .kc-hero__review { color: var(--link); }
-  .kc-hero__review :global(.num) { color: inherit; font-weight: inherit; }
-  .kc-hero__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
-  .kc-hero__caption { margin: 0; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
-  .kc-hero__scan { display: flex; align-items: center; gap: var(--space-3); width: 100%; max-width: 36rem; margin-top: var(--space-3); }
-  .kc-hero__progress { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'label value' 'bar bar'; gap: 6px var(--space-2); }
-  .kc-hero__progress .k-progress { grid-area: bar; }
-  .kc-hero__progress .k-progress-row__value { grid-area: value; }
-  .kc-hero__progress .k-progress-row__label { grid-area: label; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  /* KPIs: big figures on glass, one tone per tile */
-  .kc-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-  @container kc-col (min-width: 760px) { .kc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-  .kc-kpi { container-type: inline-size; display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--space-5) var(--space-5) var(--space-4); overflow: hidden; }
-  .kc-kpi :global(.kc-kpi__num) { margin-top: var(--space-6); }
-  .kc-kpi__label { font-size: 13px; font-weight: 510; }
-  .kc-kpi :global(.kc-kpi__num) { margin-bottom: 2px; font-size: min(34px, 13cqi); white-space: nowrap; }
-  .kc-kpi__sub { font-size: 12px; line-height: 16px; color: var(--ink-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-  /* safety band */
-  .kc-safety { list-style: none; margin: 0; padding: 0 var(--space-2); display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); font-size: 13px; line-height: 20px; color: var(--ink-secondary); }
-  .kc-safety li { display: inline-flex; align-items: center; gap: var(--space-2); cursor: default; }
-  .kc-safety li :global(.k-icon) { color: var(--ink-secondary); flex: none; }
-  .kc-safety strong { font-weight: 510; color: var(--ink); }
-
-  /* drive: one ring, used in ink-secondary, freed segment in success at the end */
-  .kc-drivecard__body { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; }
-  .kc-ring { position: relative; flex: none; width: 156px; height: 156px; display: grid; place-items: center; }
-  .kc-ring__svg { position: absolute; inset: 0; width: 156px; height: 156px; color: var(--ink-secondary); stroke-width: 1.8; }
-  .kc-ring__freed { stroke: var(--success); stroke-linecap: round; stroke-dasharray: var(--kc-seg) calc(100 - var(--kc-seg)); stroke-dashoffset: calc(-1 * var(--kc-seg-start)); opacity: clamp(0, var(--kc-seg) * 1000, 1); transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dasharray var(--duration-relaxed) var(--ease-enter-snappy), stroke-dashoffset var(--duration-relaxed) var(--ease-enter-snappy), opacity var(--duration-basic); }
-  .kc-ring__center { position: relative; display: flex; flex-direction: column; align-items: center; }
-  .kc-ring__pct { display: inline-flex; align-items: baseline; gap: 4px; font-size: 19px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
-  .kc-ring__arrow { color: var(--ink-tertiary); font-weight: 400; }
-  .kc-ring__pct :global(.kc-ring__after) { color: var(--success); }
-  .kc-facts { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; min-width: 9rem; margin: 0; }
-  .kc-facts dt { display: flex; align-items: center; gap: 6px; }
-  .kc-facts dd { margin: 2px 0 0; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-  .kc-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
-
-  /* breakdown */
-  .kc-stack { display: flex; gap: 3px; height: 14px; border-radius: var(--radius-full); overflow: hidden; margin-bottom: var(--space-3); }
-  .kc-stack > span { display: block; min-width: 0; transition: flex var(--duration-relaxed) var(--ease-enter-snappy); }
-  .kc-stack__empty { flex: 1; background: var(--k-chart-empty, var(--fill-hover)) !important; }
-  .kc-legend__head { display: flex; justify-content: flex-end; gap: var(--space-2); padding: 0 calc(56px + var(--space-3)) 4px 0; color: var(--ink-tertiary); text-transform: uppercase; letter-spacing: .06em; }
-  .kc-legend__head span { width: 5.5rem; text-align: right; }
-  .kc-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .kc-legend__row { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-1); border-radius: var(--radius-md); font-size: 13px; }
-  .kc-legend__row:hover { background: var(--fill-subtle); }
-  .kc-legend__row > :global(.k-icon) { color: var(--ink-secondary); flex: none; }
-  .kc-legend__label { flex: 1; min-width: 0; color: var(--ink); }
-  .kc-legend__sel { width: 5.5rem; text-align: right; color: var(--ink-tertiary); white-space: nowrap; }
-  .kc-legend__found { width: 5.5rem; text-align: right; color: var(--ink); white-space: nowrap; }
-  .kc-legend .k-reveal__item { width: 56px; display: flex; justify-content: flex-end; }
-
-  /* top 5 */
-  .kc-top .k-list__item { width: 100%; text-align: left; }
-  .kc-top .k-list__content { flex: 1; min-width: 0; }
-  .kc-top .k-list__title, .kc-top .k-list__desc { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kc-top__size { font-size: 13px; color: var(--ink); min-width: 4rem; text-align: right; }
-  .kc-top__empty { margin: 0; }
-
-  /* history */
-  .kc-hist { padding: 0; }
-  .kc-hist__btn { display: block; width: 100%; padding: var(--space-6); text-align: left; border-radius: inherit; color: inherit; }
-  .kc-hist__more { display: inline-flex; align-items: center; gap: 2px; font-weight: 400; }
-  .kc-hist__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: end; }
-  .kc-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .kc-stat__num--text { font-size: 15px !important; line-height: 1.5 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .kc-spark { width: 100%; height: 40px; overflow: visible; }
 </style>

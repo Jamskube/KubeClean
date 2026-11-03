@@ -40,6 +40,7 @@ class App {
   drives = $state.raw([]);
   busy = $state(''); // '' | scan | clean
   progress = $state.raw(null); // {phase, done, total, label, freed?}
+  runMini = $state(false); // clean progress reduced to a corner card: the app stays navigable
   /** rule id -> { all, set: {index: size} }: all=true means "everything except set" */
   sel = $state({});
   panel = $state(null); // rule id shown in the side panel
@@ -223,6 +224,7 @@ class App {
     const picked = this.picked.map((r) => ({ id: r.id, title: r.title, cat: r.cat, size: this.selSize(r), toRecycle: r.toRecycle, needsAdmin: r.needsAdmin }));
     const before = this.drives;
     this.busy = 'clean';
+    this.runMini = false;
     this.progress = null;
     this.panel = null;
     this.confirm = false;

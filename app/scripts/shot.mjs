@@ -4,10 +4,13 @@
 // Steps (comma or space separated): a view name (dashboard, clean, projects,
 // files, history, settings) → click its nav row, wait, shoot; "wait:scan" → wait
 // until the first scan is done; "click:<css selector>"; "theme:light|dark";
-// "sleep:<ms>"; "shot:<name>"; "size:WxH"; "clean" → open confirm via the
+// "sleep:<ms>"; "shot:<name>"; "size:WxH"; "doclean" → open confirm via the
 // primary header button, confirm it (MOCK ONLY: nothing is deleted), wait for
 // the result view. Default steps: wait:scan dashboard clean projects files
 // history settings.
+// « assert:<expression JS sans espace> » : échoue avec un code non nul si faux.
+// « hover:<sélecteur> », « key:Escape », « scroll:<pixels> » : interactions de la coque.
+// « fill:<sélecteur>=<texte> » : saisie dans un champ (sans espace dans l’étape).
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,7 +43,7 @@ app.on('browser-window-created', (_e, win) => {
     const js = (s) => wc.executeJavaScript(s);
     let n = 0;
     const shot = async (name) => { await wait(250); fs.writeFileSync(path.join(OUT, String(++n).padStart(2, '0') + '-' + name + '.png'), (await wc.capturePage()).toPNG()); console.log('shot', name); };
-    const until = async (expr, ms = 60000) => { for (let t = 0; t < ms; t += 200) { if (await js(expr)) return true; await wait(200); } console.log('timeout waiting for', expr); return false; };
+    const until = async (expr, ms = 60000) => { for (let t = 0; t < ms; t += 200) { if (await js(expr)) return true; await wait(200); } throw new Error('Délai dépassé : ' + expr); };
     try {
       await wait(800);
       for (const step of STEPS) {
@@ -49,6 +52,19 @@ app.on('browser-window-created', (_e, win) => {
         else if (k === 'click') { console.log('click', v, await js('(() => { const el = document.querySelector(' + JSON.stringify(v) + '); if (!el) return false; el.click(); return true; })()')); await wait(700); }
         else if (k === 'theme') { nativeTheme.themeSource = v; await js('document.documentElement.setAttribute("data-theme", ' + JSON.stringify(v) + ')'); await wait(500); }
         else if (k === 'sleep') await wait(Number(v));
+        else if (k === 'fill') {
+          const cut = v.lastIndexOf('=');
+          const selector = v.slice(0, cut), value = v.slice(cut + 1);
+          await js('(() => { const el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) throw new Error("Champ introuvable"); el.focus(); el.select(); })()');
+          await wc.insertText(value); await wait(300);
+        }
+        else if (k === 'hover') {
+          const point = await js('(() => { const el = document.querySelector(' + JSON.stringify(v) + '); if (!el) throw new Error("Élément introuvable"); const r = el.getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()');
+          wc.sendInputEvent({ type: 'mouseMove', ...point }); await wait(700);
+        }
+        else if (k === 'key') { const keyCode = v.replace(/^Arrow/, ''); wc.sendInputEvent({ type: 'keyDown', keyCode }); wc.sendInputEvent({ type: 'keyUp', keyCode }); await wait(500); }
+        else if (k === 'scroll') { await js('document.querySelector(".k-pane__scroll").scrollTop = ' + Number(v)); await wait(500); }
+        else if (k === 'assert') { if (!await js(v)) throw new Error('Assertion échouée : ' + v); console.log('assert ok', v); }
         else if (k === 'probe') console.log('probe', await js(\`(() => { const col = document.querySelector('.kc-column'); const app = document.querySelector('.k-app'); return JSON.stringify({ view: app?.dataset.view, busy: app?.dataset.busy, dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.id || d.className), colOpacity: col && getComputedStyle(col).opacity, colCount: document.querySelectorAll('.kc-column').length, overlays: [...document.querySelectorAll('.kc-running, .k-scrim, [data-kube-scroll-lock]')].map((e) => e.className) }); })()\`));
         else if (k === 'shot') await shot(v);
         else if (k === 'size') { const [w, h] = v.split('x').map(Number); win.setSize(w, h); await wait(600); }
@@ -60,9 +76,9 @@ app.on('browser-window-created', (_e, win) => {
           await wait(1500); await shot('cleaning');
           await until("document.querySelector('.k-app')?.dataset.view === 'result'", 120000); await wait(1200); await shot('result');
         }
-        else { console.log('nav', k, await js("(() => { const b = document.querySelector('[data-view=\\"" + k + "\\"]'); if (!b) return false; b.click(); return true; })()")); await wait(900); await shot(k); }
+        else { console.log('nav', k, await js("(() => { const b = document.querySelector('button[data-rail-view=\\"" + k + "\\"]'); if (!b) return false; b.click(); return true; })()")); await wait(900); await shot(k); }
       }
-    } catch (e) { console.log('harness error', e); }
+    } catch (e) { console.error('Erreur du harnais', e); app.exit(1); return; }
     app.quit();
   });
 });
@@ -71,5 +87,5 @@ await import(pathToFileURL(${JSON.stringify(path.join(app, 'electron', 'main.mjs
 const driverPath = path.join(out, 'userdata', 'driver.mjs');
 fs.writeFileSync(driverPath, driver);
 const electron = path.join(app, 'node_modules', 'electron', 'dist', 'electron.exe');
-const p = spawn(electron, [driverPath], { stdio: 'inherit', env: { ...process.env, ...(REAL ? {} : { KC_MOCK: '1', KC_MOCK_SPEED: process.env.KC_MOCK_SPEED ?? '0.3' }) } });
+const p = spawn(electron, ['--force-device-scale-factor=1', driverPath], { stdio: 'inherit', env: { ...process.env, ...(REAL ? {} : { KC_MOCK: '1', KC_MOCK_SPEED: process.env.KC_MOCK_SPEED ?? '0.3' }) } });
 p.on('exit', (c) => { console.log('done, shots in', out); process.exit(c ?? 0); });

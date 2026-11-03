@@ -29,7 +29,7 @@
     if (S.cleanFilter === 'empty') return isEmpty(r);
     if (isEmpty(r)) return false;
     if (S.cleanFilter === 'checked') return S.state(r) !== 'off';
-    if (S.cleanFilter === 'review') return !r.default;
+    if (S.cleanFilter === 'review') return r.perItem ? r.items.some((it) => !it.default) : !r.default;
     return true;
   };
   const visible = (cat) => rules.filter((r) => r.cat === cat && matches(r) && passes(r));
@@ -94,7 +94,7 @@
           <button class="k-page-search__clear" type="button" aria-label="Effacer la recherche" onclick={() => (q = '')}><Icon name="x" /></button>
         </label>
         <span class="kc-tools__acts">
-          <button class="k-btn k-btn--ghost k-btn--sm" type="button" disabled={!!S.busy} onclick={() => S.selectDefaults()}>Cocher d’office</button>
+          <button class="k-btn k-btn--ghost k-btn--sm" type="button" disabled={!!S.busy} onclick={() => S.selectDefaults()}>Recommandations</button>
           <button class="k-btn k-btn--ghost k-btn--sm" type="button" disabled={!!S.busy} onclick={() => S.selectNone()}>Tout décocher</button>
         </span>
       </div>

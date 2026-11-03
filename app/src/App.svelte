@@ -1,7 +1,7 @@
 <script>
   import { tick, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { S, CATS, catColor } from './lib/state.svelte.js';
+  import { S, CATS, catColor, MAC, OS } from './lib/state.svelte.js';
   import { fmt, drive } from './lib/fmt.js';
   import { kubeOn, dur } from './lib/ui/kube.js';
   import Icon from './lib/Icon.svelte';
@@ -29,7 +29,7 @@
     { id: 'files', label: 'Fichiers', icon: 'file-archive' },
     { id: 'history', label: 'Historique', icon: 'clock-arrow-left' },
     { id: 'settings', label: 'Réglages', icon: 'settings' },
-  ];
+  ].filter((n) => !(MAC && n.id === 'projects'));
   const THEMES = [
     { id: 'light', icon: 'sun', label: 'Thème clair' },
     { id: 'dark', icon: 'moon', label: 'Thème sombre' },
@@ -99,7 +99,9 @@
   function onKey(e) {
     if (e.defaultPrevented) return;
     if (e.key === 'Escape' && S.panel && !document.querySelector('dialog[open]')) { S.panel = null; return; }
-    if (e.altKey && !e.ctrlKey && !e.metaKey && e.key >= '1' && e.key <= '6') { e.preventDefault(); go(NAV[Number(e.key) - 1].id); }
+    // e.code: on a Mac, Option+1 types « ¡ » into e.key
+    const n = Number(/^Digit([1-9])$/.exec(e.code)?.[1]);
+    if (e.altKey && !e.ctrlKey && !e.metaKey && n <= NAV.length) { e.preventDefault(); go(NAV[n - 1].id); }
   }
 </script>
 
@@ -118,7 +120,7 @@
           <button class="k-seg__item" type="button" role="radio" data-value={t.id} aria-checked={S.theme === t.id} aria-label={t.label} data-kube="tooltip" data-kube-tooltip={t.label}><Icon name={t.icon} /></button>
         {/each}
       </div>
-      <button class="k-btn k-btn--ghost k-btn--sm kc-palette-btn" type="button" data-kube-open="#palette" aria-label="Ouvrir la palette de commandes"><Icon name="search" /><kbd class="k-kbd">Ctrl K</kbd></button>
+      <button class="k-btn k-btn--ghost k-btn--sm kc-palette-btn" type="button" data-kube-open="#palette" aria-label="Ouvrir la palette de commandes"><Icon name="search" /><kbd class="k-kbd">{OS.mod} K</kbd></button>
     </div>
   </header>
 
@@ -177,7 +179,7 @@
             </div>
           {/each}
           {#if S.drives.length > 3}<button class="k-btn k-btn--ghost k-btn--sm kc-drives__more" type="button" onclick={async () => { await go('dashboard'); document.getElementById('storage-title')?.scrollIntoView({ block: 'start' }); }}>Voir les {S.drives.length} lecteurs<Icon name="arrow-right" /></button>{/if}
-          {#if S.appVersion}<span class="kc-version k-micro">KubeClean {S.appVersion}<span>Local · Windows</span></span>{/if}
+          {#if S.appVersion}<span class="kc-version k-micro">KubeClean {S.appVersion}<span>Local · {OS.name}</span></span>{/if}
         </div>
       </div>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Kube resizer: keyboard-resizable separator) -->

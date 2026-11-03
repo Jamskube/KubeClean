@@ -2,7 +2,7 @@
   // Ctrl+K palette on the kit's CommandPalette (dialog + listbox runtime). Filtering is ours
   // (accent-insensitive), so the runtime's `kube:filter` is cancelled and re-run after render.
   import { tick } from 'svelte';
-  import { S, CATS } from './lib/state.svelte.js';
+  import { S, CATS, MAC, OS } from './lib/state.svelte.js';
   import { kubeOn, norm } from './lib/ui/kube.js';
   import Icon from './lib/Icon.svelte';
 
@@ -13,12 +13,12 @@
   const VIEWS = [
     ['dashboard', 'Tableau de bord', 'layout-dashboard'], ['clean', 'Nettoyage', 'broom-sparkles'], ['projects', 'Projets', 'folder-code'],
     ['files', 'Fichiers', 'file-archive'], ['history', 'Historique', 'clock-arrow-left'], ['settings', 'Réglages', 'settings'],
-  ];
+  ].filter(([v]) => !(MAC && v === 'projects'));
   const cat = (id) => CATS.find((c) => c.id === id)?.label ?? id;
 
   const groups = $derived.by(() => {
     const g = [
-      { id: 'nav', label: 'Aller à', items: VIEWS.map(([v, label, icon]) => ({ id: `view:${v}`, label: `Aller à ${label}`, icon, kbd: `Alt ${VIEWS.findIndex((x) => x[0] === v) + 1}`, run: () => { S.view = v; if (v !== 'clean') S.panel = null; } })) },
+      { id: 'nav', label: 'Aller à', items: VIEWS.map(([v, label, icon]) => ({ id: `view:${v}`, label: `Aller à ${label}`, icon, kbd: `${OS.alt} ${VIEWS.findIndex((x) => x[0] === v) + 1}`, run: () => { S.view = v; if (v !== 'clean') S.panel = null; } })) },
       { id: 'act', label: 'Actions', items: [
         S.busy === 'scan'
           ? { id: 'cancel', label: 'Annuler l’analyse', icon: 'square-x', run: () => S.cancel() }

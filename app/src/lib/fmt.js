@@ -7,4 +7,4 @@ export const int = (n) => ni.format(n);
 export const plural = (n, one, many) => `${ni.format(n)} ${n > 1 ? many : one}`;
 export const date = (ms) => df.format(new Date(ms));
 export const idle = (d) => (d == null ? 'activité inconnue' : d <= 0 ? 'modifié aujourd’hui' : `inactif depuis ${plural(d, 'jour', 'jours')}`);
-export const drive = (root) => root.replace(/\\$/, '');
+export const drive = (root) => (root === '/' ? 'Macintosh HD' : root.replace(/\\$/, ''));

@@ -14,6 +14,7 @@ Interface Electron + Svelte 5 qui pilote `kubeclean-core.exe`.
 | `scripts/make-icon.mjs` | Génère l'icône (`npm run icon`) |
 | `build/icon-master.png` | Source détourée du modèle 13 choisi : anneau métallique et flèche ; brief dans `build/icon-design.md` |
 | `public/icon.png`, `build/icon.png`, `build/icon.ico` | Déclinaisons pour l’interface, la fenêtre et l’installeur Windows |
+| `build/icon-mac.png` | Icône macOS à la grille Apple (tuile de 824 px sur 1024), générée par `npm run icon` |
 | `docs/` | `BRIEF.md` (design, contrat d'état), `kube.md` (kit), `REVIEW.md` (revue) |
 | `public/kube/` | Kit de design Kube |
 
@@ -73,3 +74,5 @@ Les transitions, le redimensionnement et la mémorisation utilisent le runtime K
 
 L’icône de fenêtre est chargée depuis `dist/`, également présent dans l’application
 empaquetée. `npm run dist` construit l’installeur ARM64 avec `build/icon.ico`.
+
+Sur Mac, la fenêtre porte le matériau macOS « sidebar » (`vibrancy`) : `data-window-backdrop="glass"` rend la coque et la barre latérale translucides sous une teinte dense, le panneau principal reste opaque. Les catégories, textes et raccourcis (⌘, ⌥) suivent `MAC` / `OS` dans `src/lib/state.svelte.js`. Le .dmg est construit sur un vrai Mac par `.github/workflows/macos.yml`.

@@ -11,6 +11,7 @@
 // « assert:<expression JS sans espace> » : échoue avec un code non nul si faux.
 // « hover:<sélecteur> », « key:Escape », « scroll:<pixels> » : interactions de la coque.
 // « fill:<sélecteur>=<texte> » : saisie dans un champ (sans espace dans l’étape).
+// « css:<fichier> » : injecte une feuille (ex. un faux bureau derrière le verre, KC_PLATFORM=darwin).
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -67,6 +68,7 @@ app.on('browser-window-created', (_e, win) => {
         else if (k === 'assert') { if (!await js(v)) throw new Error('Assertion échouée : ' + v); console.log('assert ok', v); }
         else if (k === 'probe') console.log('probe', await js(\`(() => { const col = document.querySelector('.kc-column'); const app = document.querySelector('.k-app'); return JSON.stringify({ view: app?.dataset.view, busy: app?.dataset.busy, dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.id || d.className), colOpacity: col && getComputedStyle(col).opacity, colCount: document.querySelectorAll('.kc-column').length, overlays: [...document.querySelectorAll('.kc-running, .k-scrim, [data-kube-scroll-lock]')].map((e) => e.className) }); })()\`));
         else if (k === 'shot') await shot(v);
+        else if (k === 'css') { await wc.insertCSS(fs.readFileSync(v, 'utf8')); await wait(300); }
         else if (k === 'size') { const [w, h] = v.split('x').map(Number); win.setSize(w, h); await wait(600); }
         else if (k === 'doclean' && REAL) console.log('doclean refused: real engine');
         else if (k === 'doclean') {

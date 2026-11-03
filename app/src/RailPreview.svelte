@@ -1,5 +1,5 @@
 <script>
-  import { S, CATS, appName } from './lib/state.svelte.js';
+  import { S, CATS, appName, OS } from './lib/state.svelte.js';
   import { fmt, date, drive, idle, plural } from './lib/fmt.js';
   import { norm } from './lib/ui/kube.js';
   import Icon from './lib/Icon.svelte';
@@ -95,7 +95,7 @@
       {#each files.slice(0, limit) as file (`${file.rule.id}-${file.index}`)}
         <div class="kc-preview-row"><label class="kc-preview-choice"><input class="k-checkbox" type="checkbox" checked={S.itemOn(file.rule, file.index)} disabled={!!S.busy} onchange={() => S.toggleItem(file.rule, file.index, file.size)} />
           <span class="kc-preview-copy"><strong title={file.path}>{name(file.path)}</strong><span>{fmt(file.size)} · {idle(file.idleDays)}</span><span class="kc-preview-path" title={parent(file.path)}>{parent(file.path)}</span></span>
-        </label><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher {name(file.path)} dans l’Explorateur" onclick={() => S.reveal(file.path)}><Icon name="folder-open" /></button></div>
+        </label><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher {name(file.path)} {OS.inFinder}" onclick={() => S.reveal(file.path)}><Icon name="folder-open" /></button></div>
       {/each}
       {#if !files.length}<p class="kc-preview-empty">{needle ? 'Aucun fichier ne correspond à ta recherche.' : S.scan ? 'Aucun fichier personnel ne correspond à tes critères.' : 'Les fichiers apparaîtront après l’analyse.'}</p>{/if}
     {:else if page.id === 'history'}

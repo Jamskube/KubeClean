@@ -1,6 +1,6 @@
 <script>
   import { tick } from 'svelte';
-  import { S, CATS, catColor, appName } from './lib/state.svelte.js';
+  import { S, CATS, catColor, appName, MAC } from './lib/state.svelte.js';
   import { fmt, date, drive, plural } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
@@ -79,7 +79,7 @@
     </section>
 
     <button class="kc-review" type="button" disabled={!!S.busy} onclick={() => { S.cleanFilter = 'review'; S.view = 'clean'; }}>
-      <Icon name="scan-eye" /><span class="kc-review__copy"><strong>À examiner avec toi</strong><span>Fichiers personnels, projets et opérations à choisir.</span></span>
+      <Icon name="scan-eye" /><span class="kc-review__copy"><strong>À examiner avec toi</strong><span>{MAC ? 'Gros fichiers et vieux téléchargements à choisir.' : 'Fichiers personnels, projets et opérations à choisir.'}</span></span>
       <span class="kc-review__amount"><Num value={review} /><Icon name="arrow-right" /></span>
     </button>
 

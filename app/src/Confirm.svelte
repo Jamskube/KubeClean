@@ -1,6 +1,6 @@
 <script>
   // Dialogue de confirmation du nettoyage, piloté par S.confirm.
-  import { S } from './lib/state.svelte.js';
+  import { S, MAC, SEP } from './lib/state.svelte.js';
   import { fmt, plural } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
@@ -13,14 +13,14 @@
 
   const GROUPS = [
     { key: 'permanent', title: 'Supprimés définitivement', icon: 'trash', tone: 'danger', note: 'Caches, temporaires et dossiers de compilation : les applications les recréent. Ce qui est ouvert ou a changé depuis l’analyse est laissé en place.' },
-    { key: 'recycle', title: 'Envoyés à la Corbeille', icon: 'recycle', note: 'Tes fichiers : récupérables depuis la Corbeille. Trop gros pour elle ? Windows te demandera avant de supprimer.' },
+    { key: 'recycle', title: 'Envoyés à la Corbeille', icon: 'recycle', note: MAC ? 'Tes fichiers : récupérables depuis la Corbeille, avec « Remettre » dans le Finder.' : 'Tes fichiers : récupérables depuis la Corbeille. Trop gros pour elle ? Windows te demandera avant de supprimer.' },
     { key: 'admin', title: 'Tâches administrateur', icon: 'shield', note: 'Windows affichera sa demande d’autorisation. Si tu refuses, seules ces tâches sont sautées.' },
   ];
   const groups = $derived(GROUPS.map((g) => ({ ...g, rules: S.pickedGroups[g.key] })).filter((g) => g.rules.length));
   const sum = (rules) => rules.reduce((a, r) => a + S.selSize(r), 0);
   /** items named one by one: project folders and personal files the user ticked */
   const named = (r) => (r.perItem ? r.items.filter((_, i) => S.itemOn(r, i)) : []);
-  const short = (p) => { const parts = p.split('\\'); return parts.length > 3 ? `${parts[0]}\\…\\${parts.slice(-2).join('\\')}` : p; };
+  const short = (p) => { const parts = p.split(SEP); return parts.length > 3 ? `${parts[0]}${SEP}…${SEP}${parts.slice(-2).join(SEP)}` : p; };
 </script>
 
 <dialog class="k-dialog k-dialog--form k-dialog--wide kc-confirm" bind:this={dlg} data-kube="dialog" aria-labelledby="confirm-title" onclose={() => (S.confirm = false)}>

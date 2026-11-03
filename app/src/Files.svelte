@@ -1,7 +1,7 @@
 <script>
   // « Fichiers personnels » : gros fichiers et vieux téléchargements, jamais cochés d'office, Corbeille uniquement.
   import { fly } from 'svelte/transition';
-  import { S } from './lib/state.svelte.js';
+  import { S, MAC, OS, SEP } from './lib/state.svelte.js';
   import { fmt, plural, idle } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
@@ -23,8 +23,8 @@
     { id: 'other', label: 'Autres', ext: [], icon: 'file' },
   ];
   const GLYPH = { pdf: ['pdf', 'file-type'], pptx: ['presentation', 'presentation'], ppt: ['presentation', 'presentation'], xlsx: ['spreadsheet', 'file-spreadsheet'], xls: ['spreadsheet', 'file-spreadsheet'], csv: ['spreadsheet', 'file-spreadsheet'], mp3: ['audio', 'file-music'], wav: ['audio', 'file-music'], flac: ['audio', 'file-music'], m4a: ['audio', 'file-music'] };
-  const name = (p) => p.slice(p.lastIndexOf('\\') + 1);
-  const dir = (p) => p.slice(0, p.lastIndexOf('\\'));
+  const name = (p) => p.slice(p.lastIndexOf(SEP) + 1);
+  const dir = (p) => p.slice(0, p.lastIndexOf(SEP));
   const ext = (p) => { const n = name(p).toLowerCase(); if (n.endsWith('.sql.gz')) return 'sql.gz'; const i = n.lastIndexOf('.'); return i > 0 ? n.slice(i + 1) : ''; };
   const typeOf = (p) => { const e = ext(p); return TYPES.find((t) => t.ext.includes(e)) ?? TYPES[7]; };
   const glyph = (p) => { const e = ext(p); const t = typeOf(p); return GLYPH[e] ?? [t.kind ?? null, t.icon]; };
@@ -78,7 +78,7 @@
     <div class="k-alert k-alert--block" role="note" data-kube="alert">
       <div class="k-alert__row">
         <span class="k-alert__icon"><Icon name="recycle" /></span>
-        <div class="k-alert__content"><div class="k-alert__description">Tout part à la Corbeille. Un fichier trop gros pour elle&nbsp;: Windows te demande confirmation avant de le détruire. OneDrive et le téléphone connecté ne sont jamais listés.</div></div>
+        <div class="k-alert__content"><div class="k-alert__description">{#if MAC}Tout part à la Corbeille, d’où le Finder peut tout remettre en place. La Bibliothèque, les apps, la photothèque et Dropbox ne sont jamais parcourues.{:else}Tout part à la Corbeille. Un fichier trop gros pour elle&nbsp;: Windows te demande confirmation avant de le détruire. OneDrive et le téléphone connecté ne sont jamais listés.{/if}</div></div>
         <button class="k-alert__close" type="button" aria-label="Fermer" onclick={dismiss}><Icon name="x" /></button>
       </div>
     </div>
@@ -166,7 +166,7 @@
                 </div>
                 <span class="kc-row__meta">
                   <span class="k-reveal__item kc-row__actions">
-                    <button class="k-btn k-btn--ghost k-btn--icon k-btn--xs" type="button" aria-label="Afficher dans l’Explorateur" data-kube="tooltip" onclick={() => S.reveal(it.path)}><Icon name="folder-open" /></button>
+                    <button class="k-btn k-btn--ghost k-btn--icon k-btn--xs" type="button" aria-label="Afficher {OS.inFinder}" data-kube="tooltip" onclick={() => S.reveal(it.path)}><Icon name="folder-open" /></button>
                     <button class="k-btn k-btn--ghost k-btn--icon k-btn--xs" type="button" aria-label="Ne plus jamais proposer" data-kube="tooltip" onclick={() => S.ignore(it.path)}><Icon name="eye-off" /></button>
                   </span>
                   <span class="kc-row__size kc-num">{fmt(it.size)}</span>

@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('kc', {
+  platform: ipcRenderer.sendSync('platform'),
   async call(method, params) {
     const r = await ipcRenderer.invoke('core', method, params);
     if (r.error !== undefined) throw new Error(r.error);
@@ -16,7 +17,7 @@ contextBridge.exposeInMainWorld('kc', {
   setTheme: (t) => ipcRenderer.send('theme', String(t)),
   appVersion: () => ipcRenderer.invoke('app-version'),
   onBackdrop(fn) {
-    ipcRenderer.on('backdrop', (_e, on) => fn(!!on));
-    ipcRenderer.invoke('backdrop').then((on) => fn(!!on));
+    ipcRenderer.on('backdrop', (_e, b) => fn(String(b)));
+    ipcRenderer.invoke('backdrop').then((b) => fn(String(b)));
   },
 });

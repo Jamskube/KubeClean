@@ -10,9 +10,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(here, '..', 'dist');
+const MAC = process.platform === 'darwin';
+// KC_PLATFORM=darwin with KC_MOCK: the Mac interface on the fake core, for captures on Windows
+const PLATFORM = (process.env.KC_MOCK && process.env.KC_PLATFORM) || process.platform;
+const CORE_NAME = MAC ? 'kubeclean-core' : 'kubeclean-core.exe';
 const CORE = app.isPackaged
-  ? path.join(process.resourcesPath, 'kubeclean-core.exe')
-  : path.join(here, '..', '..', 'core', 'target', 'release', 'kubeclean-core.exe');
+  ? path.join(process.resourcesPath, CORE_NAME)
+  : path.join(here, '..', '..', 'core', 'target', 'release', CORE_NAME);
 const ORIGIN = 'app://kubeclean';
 const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history']);
 
@@ -62,7 +66,7 @@ function call(method, params) {
 
 // ---------- IPC (only from our own page) ----------
 const fromApp = (e) => e.senderFrame?.url.startsWith(ORIGIN + '/');
-const isAbs = (p) => typeof p === 'string' && path.win32.isAbsolute(p) && !p.split(/[\\/]/).includes('..');
+const isAbs = (p) => typeof p === 'string' && path.isAbsolute(p) && !p.split(/[\\/]/).includes('..');
 
 ipcMain.handle('core', (e, method, params) => {
   if (!fromApp(e) || !METHODS.has(method)) return { error: 'appel refusé' };
@@ -85,6 +89,8 @@ ipcMain.handle('pick-folder', async (e) => {
 // under the transparent chrome (title bar, sidebar); content panes stay opaque.
 const MICA_OK = process.platform === 'win32' && Number(os.release().split('.')[2]) >= 22621;
 const mica = () => MICA_OK && nativeTheme.shouldUseDarkColors && !process.env.KC_MOCK;
+// macOS: the sidebar vibrancy material in both themes, under the same transparent chrome
+const backdrop = () => (PLATFORM === 'darwin' ? 'glass' : mica() ? 'mica' : 'none');
 const overlay = () => (nativeTheme.shouldUseDarkColors
   ? { color: mica() ? '#00000000' : '#212121', symbolColor: '#ffffff', height: 44 }
   : { color: '#ededed', symbolColor: '#000000', height: 44 });
@@ -94,11 +100,11 @@ function createWindow() {
     width: 1200, height: 800, minWidth: 880, minHeight: 560,
     title: 'KubeClean',
     icon: path.join(DIST, 'icon.png'),
-    backgroundColor: overlay().color,
-    // set before the first show: applied later, the DWM can keep an opaque backdrop
-    backgroundMaterial: mica() ? 'mica' : 'none',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: overlay(),
+    ...(MAC
+      // traffic lights centred in the 44px title bar
+      ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 15 }, vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' }
+      // set before the first show: applied later, the DWM can keep an opaque backdrop
+      : { backgroundColor: overlay().color, backgroundMaterial: mica() ? 'mica' : 'none', titleBarStyle: 'hidden', titleBarOverlay: overlay() }),
     show: false,
     webPreferences: {
       preload: path.join(here, 'preload.cjs'),
@@ -108,7 +114,7 @@ function createWindow() {
       spellcheck: false,
     },
   });
-  win.removeMenu();
+  if (!MAC) win.removeMenu(); // macOS keeps its app menu: Quit, Copy, Paste
   win.once('ready-to-show', () => win.show());
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -128,7 +134,9 @@ let cleaning = false;
 ipcMain.on('cleaning', (e, on) => { if (fromApp(e)) cleaning = !!on; });
 // the page owns the theme choice; the native window buttons follow it
 ipcMain.on('theme', (e, t) => { if (fromApp(e) && ['system', 'light', 'dark'].includes(t)) nativeTheme.themeSource = t; });
-ipcMain.handle('backdrop', () => mica());
+ipcMain.handle('backdrop', () => backdrop());
+// not secret, and read by the preload before the frame URL is final
+ipcMain.on('platform', (e) => { e.returnValue = PLATFORM; });
 
 app.whenReady().then(() => {
   protocol.handle('app', (req) => {
@@ -140,10 +148,12 @@ app.whenReady().then(() => {
   });
   nativeTheme.on('updated', () => {
     if (!win) return;
-    win.setBackgroundMaterial(mica() ? 'mica' : 'none');
-    win.setBackgroundColor(overlay().color);
-    win.setTitleBarOverlay(overlay());
-    win.webContents.send('backdrop', mica());
+    if (!MAC) {
+      win.setBackgroundMaterial(mica() ? 'mica' : 'none');
+      win.setBackgroundColor(overlay().color);
+      win.setTitleBarOverlay(overlay());
+    }
+    win.webContents.send('backdrop', backdrop());
   });
   createWindow();
 });

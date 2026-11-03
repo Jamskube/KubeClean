@@ -1,4 +1,4 @@
-// Décline le modèle 13 en PNG et ICO multi-résolution pour Windows.
+// Décline le modèle 13 en PNG et ICO multi-résolution pour Windows, et en PNG à la grille Apple pour macOS.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -48,6 +48,10 @@ app.whenReady().then(async () => {
     offset += frames[i].length;
   });
   fs.writeFileSync(${JSON.stringify(path.join(app, 'build', 'icon.ico'))}, Buffer.concat([header, ...frames]));
+  // macOS : tuile de 824 px centrée, coins de 185 px, comme les icônes du système
+  await w.webContents.executeJavaScript("Object.assign(document.querySelector('img').style, { width: '824px', height: '824px', margin: '100px', clipPath: 'inset(0 round 22.5%)' })");
+  await new Promise((r) => setTimeout(r, 300));
+  fs.writeFileSync(${JSON.stringify(path.join(app, 'build', 'icon-mac.png'))}, (await w.webContents.capturePage({ x: 0, y: 0, width: 1024, height: 1024 })).toPNG());
   app.quit();
 }).catch((e) => { console.error(e); app.exit(1); });
 `;
@@ -57,6 +61,6 @@ const electron = path.join(app, 'node_modules', 'electron', 'dist', 'electron.ex
 spawn(electron, ['--force-device-scale-factor=1', driverPath], { stdio: 'inherit' }).on('exit', (c) => {
   fs.rmSync(driverPath, { force: true });
   fs.rmSync(page, { force: true });
-  console.log(c === 0 ? 'Icônes générées : build/icon.png, build/icon.ico, public/icon.png' : `Electron terminé avec le code ${c}`);
+  console.log(c === 0 ? 'Icônes générées : build/icon.png, build/icon.ico, build/icon-mac.png, public/icon.png' : `Electron terminé avec le code ${c}`);
   process.exit(c ?? 0);
 });

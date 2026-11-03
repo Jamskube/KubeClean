@@ -1,6 +1,6 @@
 <script>
   // Panneau latéral d'une règle : note contextuelle, éléments (cochables ou non), actions par élément.
-  import { S, pickable, appName } from './lib/state.svelte.js';
+  import { S, pickable, appName, MAC, OS, SEP } from './lib/state.svelte.js';
   import { fmt, plural, idle } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
@@ -22,7 +22,7 @@
 
   let sort = $state('size'); // size | name | age
   const SORTS = [['size', 'Taille'], ['name', 'Nom'], ['age', 'Ancienneté']];
-  const name = (p) => p.split('\\').pop();
+  const name = (p) => p.split(SEP).pop();
   const dir = (p) => p.slice(0, Math.max(0, p.length - name(p).length - 1));
   const shownName = (it) => (r.kind === 'projects' ? `${name(dir(it.path))} / ${name(it.path)}` : name(it.path));
   const items = $derived.by(() => {
@@ -41,10 +41,10 @@
   /** directory shared by every listed item, shown once; rows then show the rest */
   const prefix = $derived.by(() => {
     if (items.length < 2) return '';
-    const segs = items.map((it) => dir(it.path).split('\\'));
+    const segs = items.map((it) => dir(it.path).split(SEP));
     const first = segs[0]; let n = 0;
     while (n < first.length && segs.every((p) => p[n]?.toLowerCase() === first[n].toLowerCase())) n++;
-    return n >= 2 ? first.slice(0, n).join('\\') : '';
+    return n >= 2 ? first.slice(0, n).join(SEP) : '';
   });
   const rel = (it) => { const d = dir(it.path); return prefix ? d.slice(prefix.length + 1) : d; };
 </script>
@@ -69,7 +69,7 @@
       <div class="kc-note"><Icon name="trash" /><p>La Corbeille est vidée d’un coup, pour tous les disques. Jette un œil dedans avant.</p></div>
     {/if}
     {#if r.blockedBy.length}
-      <div class="kc-note kc-note--warning"><Icon name="triangle-alert" /><p>{r.blockedBy.map(appName).join(', ')} {r.blockedBy.length > 1 ? 'sont ouverts' : 'est ouvert'} : les fichiers que l’application utilise seront laissés en place.</p></div>
+      <div class="kc-note kc-note--warning"><Icon name="triangle-alert" /><p>{r.blockedBy.map(appName).join(', ')} {r.blockedBy.length > 1 ? 'sont ouverts' : 'est ouvert'} : {MAC ? 'ce poste sera sauté tant qu’elle reste ouverte. Ferme-la avant de nettoyer.' : 'les fichiers que l’application utilise seront laissés en place.'}</p></div>
     {/if}
 
     {#if r.kind === 'elevated' && !r.sizeKnown}
@@ -109,7 +109,7 @@
             </div>
             <span class="kc-item__right"><span class="kc-item__size">{fmt(it.size)}</span>{#if age(it)}<span class="kc-item__meta">{age(it)}</span>{/if}</span>
             <span class="k-reveal__item kc-item__actions">
-              <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher dans l’Explorateur" data-kube="tooltip" onclick={() => S.reveal(it.path)}><Icon name="folder-open" /></button>
+              <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher {OS.inFinder}" data-kube="tooltip" onclick={() => S.reveal(it.path)}><Icon name="folder-open" /></button>
               <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Ne plus jamais proposer" data-kube="tooltip" onclick={() => S.ignore(it.path)}><Icon name="eye-off" /></button>
             </span>
           </li>

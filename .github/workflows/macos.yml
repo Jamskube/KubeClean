@@ -1,0 +1,92 @@
+# Version Mac (Apple Silicon) : tests du moteur sur macOS, application signée ad hoc,
+# image disque .dmg, et un essai de démarrage avec capture d'écran. Rien n'est nettoyé :
+# l'essai du moteur ne fait qu'une analyse.
+name: macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['core/**', 'app/**', '.github/workflows/macos.yml']
+
+jobs:
+  mac:
+    runs-on: macos-latest # arm64
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Rust stable
+        run: rustup update stable --no-self-update && rustup default stable && rustc -V
+
+      - name: Tests du moteur (Corbeille réelle comprise)
+        working-directory: core
+        # /var est un lien symbolique sous macOS et le moteur refuse tout chemin qui en traverse un :
+        # les dossiers temporaires des tests vont dans un dossier sans lien.
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: cargo test --release -- --include-ignored
+
+      - name: Moteur
+        working-directory: core
+        run: cargo build --release
+
+      - name: Interface
+        working-directory: app
+        run: |
+          npm ci
+          npx svelte-check
+          npx vite build
+
+      - name: Application
+        working-directory: app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac --arm64
+
+      - name: Signature ad hoc et image disque
+        id: dmg
+        run: |
+          APP="app/release/mac-arm64/KubeClean.app"
+          # Apple Silicon refuse un code à la signature cassée : on resigne tout le paquet, ad hoc
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          VERSION=$(node -p "require('./app/package.json').version")
+          mkdir -p dmg
+          ditto "$APP" dmg/KubeClean.app
+          ln -s /Applications dmg/Applications
+          DMG="KubeClean-$VERSION-mac-arm64.dmg"
+          hdiutil create -volname KubeClean -srcfolder dmg -ov -format UDZO "$DMG"
+          echo "file=$DMG" >> "$GITHUB_OUTPUT"
+          lipo -archs "$APP/Contents/Resources/kubeclean-core" "$APP/Contents/MacOS/KubeClean"
+
+      - name: Essai du moteur empaqueté (analyse seule)
+        continue-on-error: true
+        working-directory: app
+        run: node scripts/core-smoke.mjs "release/mac-arm64/KubeClean.app/Contents/Resources/kubeclean-core" "$RUNNER_TEMP/kc-data"
+
+      - name: Essai de démarrage et capture
+        continue-on-error: true
+        run: |
+          "app/release/mac-arm64/KubeClean.app/Contents/MacOS/KubeClean" > launch.log 2>&1 &
+          PID=$!
+          sleep 25
+          screencapture -x shot.png || true
+          kill -0 "$PID" && echo "KubeClean tourne toujours après 25 s"
+          kill "$PID" || true
+          cat launch.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KubeClean-mac-arm64
+          path: |
+            ${{ steps.dmg.outputs.file }}
+            shot.png
+            launch.log
+          if-no-files-found: warn

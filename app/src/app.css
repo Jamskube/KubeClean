@@ -228,3 +228,65 @@ body { overflow: hidden; }
   .kc-pane-header { padding-inline: var(--space-4); }
   .kc-pane-header__status { max-width: 170px; }
 }
+
+/* ---------- macOS : verre liquide ----------
+   La fenêtre porte le matériau « sidebar » de macOS (le bureau flouté derrière). La coque
+   (barre de titre, rail) et la barre latérale le laissent passer sous une teinte dense, pour
+   que tout reste lisible ; le panneau principal reste opaque. Un liseré clair en haut et une
+   ombre longue donnent l'épaisseur du verre. */
+:root[data-platform='mac'] .kc-titlebar { padding-inline-start: 84px; } /* feux de la fenêtre */
+:root[data-window-backdrop='glass'] {
+  --kc-glass-chrome: color-mix(in srgb, var(--kc-shell) 62%, transparent);
+  --kc-glass-panel: color-mix(in srgb, var(--surface) 34%, transparent);
+  --kc-glass-sheen: rgb(255 255 255 / .28);
+  --kc-glass-edge: rgb(255 255 255 / .75);
+  --kc-glass-edge-low: rgb(0 0 0 / .06);
+  --kc-glass-depth: 0 0 0 .5px rgb(0 0 0 / .08), 0 14px 36px -18px rgb(0 0 0 / .3);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light'])[data-window-backdrop='glass'] {
+    --kc-glass-chrome: color-mix(in srgb, var(--kc-shell) 56%, transparent);
+    --kc-glass-panel: color-mix(in srgb, var(--surface) 40%, transparent);
+    --kc-glass-sheen: rgb(255 255 255 / .05);
+    --kc-glass-edge: rgb(255 255 255 / .2);
+    --kc-glass-edge-low: rgb(255 255 255 / .04);
+    --kc-glass-depth: 0 0 0 .5px rgb(0 0 0 / .55), 0 18px 44px -20px rgb(0 0 0 / .7);
+  }
+}
+:root[data-theme='dark'][data-window-backdrop='glass'] {
+  --kc-glass-chrome: color-mix(in srgb, var(--kc-shell) 56%, transparent);
+  --kc-glass-panel: color-mix(in srgb, var(--surface) 40%, transparent);
+  --kc-glass-sheen: rgb(255 255 255 / .05);
+  --kc-glass-edge: rgb(255 255 255 / .2);
+  --kc-glass-edge-low: rgb(255 255 255 / .04);
+  --kc-glass-depth: 0 0 0 .5px rgb(0 0 0 / .55), 0 18px 44px -20px rgb(0 0 0 / .7);
+}
+:root[data-window-backdrop='glass'],
+:root[data-window-backdrop='glass'] :is(body, #app) { background: transparent; }
+:root[data-window-backdrop='glass'] .k-app { background: var(--kc-glass-chrome); }
+:root[data-window-backdrop='glass'] .kc-workspace { background: transparent; border-color: transparent; box-shadow: var(--kc-glass-depth); }
+:root[data-window-backdrop='glass'] .kc-workspace > .k-sidebar { background: linear-gradient(180deg, var(--kc-glass-sheen), transparent 14rem), var(--kc-glass-panel); }
+/* liseré : capte la lumière en haut, s'efface sur les côtés */
+:root[data-window-backdrop='glass'] .kc-workspace::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--kc-glass-edge), transparent 24%, transparent 80%, var(--kc-glass-edge-low));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+/* commandes de la barre de titre : petites capsules de verre */
+:root[data-window-backdrop='glass'] :is(.kc-theme, .kc-palette-btn) {
+  background: var(--kc-glass-panel);
+  box-shadow: inset 0 1px 0 var(--kc-glass-sheen), 0 0 0 .5px var(--kc-glass-edge-low), 0 1px 2px rgb(0 0 0 / .06);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root[data-window-backdrop='glass'] .k-app { background: var(--kc-shell); }
+  :root[data-window-backdrop='glass'] .kc-workspace > .k-sidebar { background: var(--surface); }
+  :root[data-window-backdrop='glass'] .kc-workspace { border-color: var(--border); }
+}

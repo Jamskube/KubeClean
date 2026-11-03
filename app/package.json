@@ -2,7 +2,7 @@
   "name": "kubeclean",
   "productName": "KubeClean",
   "version": "2.0.0",
-  "description": "Nettoyeur de disque pour Windows : cœur Rust, interface Electron + Svelte avec le kit Kube.",
+  "description": "Nettoyeur de disque pour Windows et macOS : cœur Rust, interface Electron + Svelte avec le kit Kube.",
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",
@@ -26,20 +26,37 @@
       "dist/**",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "../core/target/release/kubeclean-core.exe",
-        "to": "kubeclean-core.exe"
-      }
-    ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "extraResources": [
+        {
+          "from": "../core/target/release/kubeclean-core.exe",
+          "to": "kubeclean-core.exe"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": "dir",
+      "icon": "build/icon-mac.png",
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "extraResources": [
+        {
+          "from": "../core/target/release/kubeclean-core",
+          "to": "kubeclean-core"
+        }
+      ],
+      "extendInfo": {
+        "NSDesktopFolderUsageDescription": "KubeClean cherche les gros fichiers de ton Bureau. Rien n’est touché sans ton accord.",
+        "NSDocumentsFolderUsageDescription": "KubeClean cherche les gros fichiers de tes Documents. Rien n’est touché sans ton accord.",
+        "NSDownloadsFolderUsageDescription": "KubeClean liste les vieux téléchargements. Rien n’est touché sans ton accord."
+      }
     }
   },
   "devDependencies": {

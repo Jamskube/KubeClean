@@ -1,6 +1,6 @@
 <script>
   // Réglages : brouillon local qui suit S.settings, enregistré tout seul 400 ms après une modification valide.
-  import { S, toast } from './lib/state.svelte.js';
+  import { S, toast, MAC, OS } from './lib/state.svelte.js';
   import { int } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import { untrack } from 'svelte';
@@ -116,7 +116,7 @@
         <div class="k-settings-row">
           <div class="k-settings-row__text">
             <span class="k-settings-row__label" id="theme-label">Thème</span>
-            <span class="k-settings-row__desc">« Système » suit le réglage de Windows.</span>
+            <span class="k-settings-row__desc">« Système » suit le réglage de {OS.name}.</span>
           </div>
           <div class="k-settings-row__control">
             <div class="k-seg" role="radiogroup" data-kube="segmented" aria-labelledby="theme-label">
@@ -132,6 +132,7 @@
   </section>
 
   {#if d}
+    {#if !MAC}
     <section class="k-settings-section" id="projets">
       <div class="k-settings-section__header"><div class="k-settings-section__text">
         <h2 class="k-settings-section__title">Projets de développement</h2>
@@ -162,6 +163,7 @@
         </div>
       </div>
     </section>
+    {/if}
 
     <section class="k-settings-section" id="fichiers">
       <div class="k-settings-section__header"><div class="k-settings-section__text">
@@ -170,7 +172,7 @@
       </div></div>
       <div class="k-settings-section__content">
         <div class="k-settings-group">
-          {@render number('largeFileMinMb', 'big', 'Gros fichiers à partir de N Mo', 'Cherchés dans ton dossier utilisateur. AppData, OneDrive et un téléphone connecté ne sont jamais parcourus.', 'Mo')}
+          {@render number('largeFileMinMb', 'big', 'Gros fichiers à partir de N Mo', MAC ? 'Cherchés dans ton dossier personnel. La Bibliothèque, les apps, la photothèque et Dropbox ne sont jamais parcourues.' : 'Cherchés dans ton dossier utilisateur. AppData, OneDrive et un téléphone connecté ne sont jamais parcourus.', 'Mo')}
           {@render number('downloadsOlderThanDays', 'dl', 'Téléchargements plus vieux que N jours', 'D’après la date du fichier dans le dossier Téléchargements.', 'jours')}
         </div>
       </div>
@@ -188,7 +190,7 @@
           <div class="k-settings-row k-settings-row--compact">
             <div class="k-settings-row__text"><span class="k-settings-row__label kc-mono">{p}</span></div>
             <div class="k-settings-row__control">
-              <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher {p} dans l’Explorateur" data-kube="tooltip" data-kube-tooltip="Afficher dans l’Explorateur" onclick={() => S.reveal(p)}><Icon name="folder-open" /></button>
+              <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher {p} {OS.inFinder}" data-kube="tooltip" data-kube-tooltip="Afficher {OS.inFinder}" onclick={() => S.reveal(p)}><Icon name="folder-open" /></button>
               <button class="k-btn k-btn--sm" type="button" onclick={() => unignore(p)}><Icon name="undo-2" />Proposer à nouveau</button>
             </div>
           </div>
@@ -206,7 +208,7 @@
         <div class="k-settings-row k-settings-row--compact">
           <div class="k-settings-row__text">
             <span class="k-settings-row__label">KubeClean {S.appVersion}{S.version ? ` · moteur Rust ${S.version}` : ''}</span>
-            <span class="k-settings-row__desc">Nettoyeur de disque pour Windows. Interface Electron + Svelte, kit Kube.</span>
+            <span class="k-settings-row__desc">Nettoyeur de disque pour {OS.name}. Interface Electron + Svelte, kit Kube.</span>
           </div>
           <div class="k-settings-row__control kc-about"><Icon name="broom-sparkles" /></div>
         </div>

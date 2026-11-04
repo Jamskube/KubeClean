@@ -78,8 +78,20 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             let set = rules::RuleSet::load(c.data_dir())?;
             let settings = c.store.settings();
             let running = os::running_processes();
+            // le libellé nomme ce qui tourne ENCORE : c'est là qu'une analyse qui s'éternise attend
+            let finished = std::sync::Mutex::new(std::collections::HashSet::new());
             let on_rule = |done: usize, total: usize, s: &scan::RuleScan| {
-                c.event("progress", json!({ "phase": "scan", "done": done, "total": total, "label": s.rule.title }));
+                let label = {
+                    let mut f = finished.lock().unwrap_or_else(|e| e.into_inner());
+                    f.insert(s.rule.id.clone());
+                    let waiting: Vec<&str> = set.rules.iter().filter(|r| !f.contains(&r.id)).map(|r| r.title.as_str()).collect();
+                    match waiting.as_slice() {
+                        [] => s.rule.title.clone(),
+                        [one] => one.to_string(),
+                        [first, rest @ ..] => format!("{first} +{}", rest.len()),
+                    }
+                };
+                c.event("progress", json!({ "phase": "scan", "done": done, "total": total, "label": label }));
                 c.event("rule", json!(scan::summarize(s, &running))); // live reveal, same shape as the final list
             };
             let scans = scan::scan_all(&set, &settings, &c.cancel, &on_rule);

@@ -28,7 +28,9 @@ let win = null;
 // ---------- core process ----------
 let core = null;
 const pending = new Map();
+const methods = new Map(); // id -> method, to know whether a scan is still running
 let nextId = 0;
+let stopping = false; // engine killed on purpose to end a stuck scan
 
 function startCore() {
   // KC_MOCK=1: fake core for UI work (scripts/mock-core.mjs), touches no file
@@ -41,14 +43,18 @@ function startCore() {
     if (m.event) return win?.webContents.send('core-event', m);
     const h = pending.get(m.id);
     pending.delete(m.id);
+    methods.delete(m.id);
     h?.(m.error !== undefined ? { error: m.error } : { result: m.result });
   });
   const gone = (why) => {
     if (core !== p) return;
     core = null;
-    for (const h of pending.values()) h({ error: `le moteur s'est arrêté (${why})` });
+    const killed = stopping;
+    stopping = false;
+    for (const h of pending.values()) h({ error: killed ? 'analyse annulée' : `le moteur s'est arrêté (${why})` });
     pending.clear();
-    win?.webContents.send('core-event', { event: 'core-exit', data: why });
+    methods.clear();
+    if (!killed) win?.webContents.send('core-event', { event: 'core-exit', data: why });
   };
   p.on('exit', (code) => gone(`code ${code}`));
   p.on('error', (e) => gone(e.message));
@@ -60,6 +66,7 @@ function call(method, params) {
   const id = ++nextId;
   return new Promise((resolve) => {
     pending.set(id, resolve);
+    methods.set(id, method);
     core.stdin.write(JSON.stringify({ id, method, params: params ?? {} }) + '\n');
   });
 }
@@ -70,6 +77,15 @@ const isAbs = (p) => typeof p === 'string' && path.isAbsolute(p) && !p.split(/[\
 
 ipcMain.handle('core', (e, method, params) => {
   if (!fromApp(e) || !METHODS.has(method)) return { error: 'appel refusé' };
+  // a folder read can block in the kernel (macOS waits on its permission prompt) and never see the
+  // cancel flag: a scan changes nothing on disk, so ending the engine is safe. Never during a clean.
+  if (method === 'cancel') {
+    const scans = [...methods].filter(([, m]) => m === 'scan').map(([id]) => id); // only the scans running now
+    setTimeout(() => {
+      const running = [...methods.values()];
+      if (core && scans.some((id) => methods.has(id)) && !running.includes('clean')) { stopping = true; core.kill('SIGKILL'); }
+    }, 3000);
+  }
   return call(method, params);
 });
 ipcMain.handle('reveal', (e, p) => {

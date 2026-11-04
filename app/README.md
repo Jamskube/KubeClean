@@ -65,6 +65,7 @@ Les transitions, le redimensionnement et la mémorisation utilisent le runtime K
 - `npm run check` puis `npm run build` : vérifie Svelte et compile l’interface.
 - `node scripts/shot.mjs <sortie> wait:scan dashboard doclean` : parcours simulé.
 - `KC_MOCK_DATA=worst` : noms longs, six lecteurs et volumes en To.
+- `KC_MOCK_STALL=1` : l'analyse ignore « Annuler », comme une lecture bloquée par une demande d'accès macOS ; l'app doit tuer le moteur au bout de 3 s.
 - Le harnais accepte `assert:<expression JS sans espace ni virgule>` et échoue en cas
   d’assertion fausse ou de délai dépassé. Les captures utilisent un facteur 1.
   `hover:<sélecteur>`, `key:Escape` et `scroll:<pixels>` vérifient les interactions.

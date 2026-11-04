@@ -11,7 +11,7 @@ Context for AI coding assistants. Read at the start of every session.
 ## Setup commands
 - `cd app; npm install`
 - `npm start` (dans `app/` : build du moteur + vite build + electron) — ou `KubeClean.cmd` à la racine
-- `KC_MOCK=1 npx electron .` : moteur factice, aucun accès disque ; `KC_MOCK_DATA=worst` en plus : données extrêmes (To, six lecteurs, noms longs) pour tester la mise en page
+- `KC_MOCK=1 npx electron .` : moteur factice, aucun accès disque ; `KC_MOCK_DATA=worst` en plus : données extrêmes (To, six lecteurs, noms longs) pour tester la mise en page ; `KC_MOCK_STALL=1` : analyse sourde à l’annulation (arrêt forcé du moteur)
 - `npm run dist` : installeur `app/release/KubeClean Setup <version>.exe`
 - Mac : workflow « macOS » (push sur `main` ou lancement manuel) → artefact `KubeClean-mac-arm64` (.dmg signé ad hoc, capture de démarrage) ; `cargo check --target aarch64-apple-darwin --all-targets` vérifie la compilation Mac depuis Windows
 - `KC_MOCK=1 KC_PLATFORM=darwin` : interface Mac (catégories, textes, verre) sur moteur factice

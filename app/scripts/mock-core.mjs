@@ -128,7 +128,7 @@ const methods = {
       const out = [];
       for (let i = 0; i < RULES.length; i++) {
         await scaled(140 + h(RULES[i].id) * 260);
-        if (cancelled) throw new Error('analyse annulée');
+        if (cancelled && !process.env.KC_MOCK_STALL) throw new Error('analyse annulée'); // STALL : lecture bloquée qui ne voit pas l'annulation
         const s = summary(RULES[i]);
         out.push(s);
         send({ event: 'progress', data: { phase: 'scan', done: i + 1, total: RULES.length, label: s.title } });

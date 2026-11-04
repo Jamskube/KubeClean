@@ -54,6 +54,7 @@ class App {
   drives = $state.raw([]);
   busy = $state(''); // '' | scan | clean
   progress = $state.raw(null); // {phase, done, total, label, freed?}
+  progressAt = 0; // time of the last progress event, for the stalled-scan hint (not reactive)
   runMini = $state(false); // clean progress reduced to a corner card: the app stays navigable
   /** rule id -> { all, set: {index: size} }: all=true means "everything except set" */
   sel = $state({});
@@ -71,7 +72,7 @@ class App {
     document.documentElement.dataset.platform = MAC ? 'mac' : 'win';
     kc.onBackdrop((b) => { document.documentElement.dataset.windowBackdrop = b; });
     kc.onEvent((m) => {
-      if (m.event === 'progress') this.progress = m.data;
+      if (m.event === 'progress') { this.progress = m.data; this.progressAt = Date.now(); }
       else if (m.event === 'rule') this.live = [...this.live, m.data];
       else if (m.event === 'core-exit') {
         this.busy = '';
@@ -208,6 +209,13 @@ class App {
     this.progress = null;
     this.live = [];
     const t0 = performance.now();
+    // macOS suspend la lecture de Bureau, Documents ou Téléchargements tant que sa demande d'accès attend une réponse
+    this.progressAt = Date.now();
+    const stall = MAC && setInterval(() => {
+      if (Date.now() - this.progressAt < 10_000) return;
+      clearInterval(stall);
+      toast({ title: 'L’analyse attend peut-être ta permission', description: 'Si macOS demande l’accès à Bureau, Documents ou Téléchargements, réponds à sa fenêtre : l’analyse reprend aussitôt. Tu peux aussi l’annuler.' });
+    }, 1000);
     try {
       const r = await kc.call('scan');
       this.scanMs = performance.now() - t0;
@@ -220,6 +228,7 @@ class App {
       if (e.message === 'analyse annulée') toast({ title: 'Analyse annulée' });
       else toast({ title: "L'analyse a échoué", description: e.message, tone: 'danger' });
     } finally {
+      clearInterval(stall);
       this.busy = '';
       this.progress = null;
     }

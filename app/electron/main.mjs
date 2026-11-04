@@ -107,9 +107,13 @@ const MICA_OK = process.platform === 'win32' && Number(os.release().split('.')[2
 const mica = () => MICA_OK && nativeTheme.shouldUseDarkColors && !process.env.KC_MOCK;
 // macOS: the sidebar vibrancy material in both themes, under the same transparent chrome
 const backdrop = () => (PLATFORM === 'darwin' ? 'glass' : mica() ? 'mica' : 'none');
-const overlay = () => (nativeTheme.shouldUseDarkColors
-  ? { color: mica() ? '#00000000' : '#212121', symbolColor: '#ffffff', height: 44 }
-  : { color: '#ededed', symbolColor: '#000000', height: 44 });
+// the caption buttons sit straight on the header under Mica, and in the Mac preview (KC_PLATFORM=darwin)
+// whose glass header a solid button strip would interrupt
+const overlay = () => {
+  const dark = nativeTheme.shouldUseDarkColors;
+  const clear = mica() || PLATFORM === 'darwin';
+  return { color: clear ? '#00000000' : dark ? '#212121' : '#ededed', symbolColor: dark ? '#ffffff' : '#000000', height: 44 };
+};
 
 function createWindow() {
   win = new BrowserWindow({

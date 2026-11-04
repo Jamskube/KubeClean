@@ -12,7 +12,7 @@
 
   const VIEWS = [
     ['dashboard', 'Tableau de bord', 'layout-dashboard'], ['clean', 'Nettoyage', 'broom-sparkles'], ['projects', 'Projets', 'folder-code'],
-    ['files', 'Fichiers', 'file-archive'], ['apps', 'Applications', 'app-window'], ['history', 'Historique', 'clock-arrow-left'], ['settings', 'Réglages', 'settings'],
+    ['files', 'Fichiers', 'file-archive'], ['apps', 'Applications', 'app-window'], ['space', 'Espace disque', 'chart-pie'], ['history', 'Historique', 'clock-arrow-left'], ['settings', 'Réglages', 'settings'],
   ].filter(([v]) => !(MAC && v === 'projects'));
   const cat = (id) => CATS.find((c) => c.id === id)?.label ?? id;
 

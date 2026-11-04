@@ -11,6 +11,7 @@
   import Projects from './Projects.svelte';
   import Files from './Files.svelte';
   import Apps from './Apps.svelte';
+  import Space from './Space.svelte';
   import History from './History.svelte';
   import Settings from './Settings.svelte';
   import Result from './Result.svelte';
@@ -29,6 +30,7 @@
     { id: 'projects', label: 'Projets', icon: 'folder-code' },
     { id: 'files', label: 'Fichiers', icon: 'file-archive' },
     { id: 'apps', label: 'Applications', icon: 'app-window' },
+    { id: 'space', label: 'Espace disque', icon: 'chart-pie' },
     { id: 'history', label: 'Historique', icon: 'clock-arrow-left' },
     { id: 'settings', label: 'Réglages', icon: 'settings' },
   ].filter((n) => !(MAC && n.id === 'projects'));
@@ -93,6 +95,7 @@
       const p = S.progress;
       return p ? `Analyse… ${p.done}/${p.total} · ${p.label}` : 'Analyse…';
     }
+    if (S.busy === 'space') return 'Mesure de l’espace…';
     if (S.busy === 'clean') return S.progress?.label ? `Nettoyage… ${S.progress.label}` : 'Nettoyage…';
     if (!S.scan) return 'En attente du moteur';
     return `Analyse terminée · ${sec} s`;
@@ -209,6 +212,7 @@
                   {:else if S.view === 'projects'}<Projects />
                   {:else if S.view === 'files'}<Files />
                   {:else if S.view === 'apps'}<Apps />
+                  {:else if S.view === 'space'}<Space />
                   {:else if S.view === 'history'}<History />
                   {:else if S.view === 'settings'}<Settings />
                   {:else if S.view === 'result'}<Result />{/if}

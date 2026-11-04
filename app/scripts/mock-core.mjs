@@ -173,7 +173,48 @@ let UPDATES = MAC_MOCK ? null : [
   { id: 'Git.Git', name: 'Git', version: '2.52.0', available: '2.56.0.4' },
   { id: 'Microsoft.VisualStudioCode', name: 'Microsoft Visual Studio Code (User)', version: '1.94.0', available: '1.95.1' },
 ];
+
+// cartographie factice : chaque dossier se partage la taille que son parent lui a donnée
+const SPACE_SEP = MAC_MOCK ? '/' : '\\';
+const SPACE_HOME = MAC_MOCK ? '/Users/nico' : USER;
+const spaceKnown = new Map([[SPACE_HOME, 260e9], [MAC_MOCK ? '/Applications' : 'C:\\', MAC_MOCK ? 38e9 : 452e9], ['G:\\', 800e9]]);
+const DIRS = ['AppData', 'Desktop', 'Documents', 'Videos', 'Pictures', 'Downloads', 'Music', '.cargo', '.gradle', 'node_modules', 'Projets', 'Sauvegardes', 'Library', 'Caches', 'Steam', 'Jeux'];
+const FILES = ['film-vacances.mkv', 'sauvegarde-2025.zip', 'Windows11.vhdx', 'photos-2024.tar', 'dataset.parquet', 'notes.md', 'rapport.pdf'];
+function spaceList(p) {
+  const total = spaceKnown.get(p) ?? 1e9;
+  const depth = p.split(SPACE_SEP).filter(Boolean).length;
+  const n = WORST ? 400 : 5 + Math.floor(h(p) * 12);
+  const ws = Array.from({ length: n }, (_, i) => Math.pow(h(p + i), 1.6) + 0.01);
+  const sum = ws.reduce((a, b) => a + b, 0);
+  const entries = ws.map((w, i) => {
+    const dir = depth < 6 && i % 4 !== 3;
+    const name = dir ? DIRS[Math.floor(h(p + 'd' + i) * DIRS.length)] + (i >= DIRS.length ? ` ${i}` : '') : FILES[Math.floor(h(p + 'f' + i) * FILES.length)].replace('.', `-${i}.`);
+    const path = p.endsWith(SPACE_SEP) ? p + name : p + SPACE_SEP + name;
+    const size = Math.round((total * w) / sum);
+    if (dir) spaceKnown.set(path, size);
+    return { name, path, size, files: dir ? Math.round(size / 2e6) + 1 : 1, isDir: dir, package: MAC_MOCK && dir && name === 'Library' };
+  }).filter((e, i, a) => a.findIndex((x) => x.path === e.path) === i).sort((a, b) => b.size - a.size);
+  const shown = entries.slice(0, 150), tail = entries.slice(150);
+  return { path: p, size: entries.reduce((n, e) => n + e.size, 0), files: entries.reduce((a, e) => a + e.files, 0), entries: shown, rest: tail.reduce((a, e) => a + e.size, 0), restCount: tail.length };
+}
+
 const appMethods = {
+  async space({ path: p }) {
+    if (!p) return { roots: MAC_MOCK ? [{ label: 'Dossier personnel', path: SPACE_HOME }, { label: 'Applications', path: '/Applications' }] : [{ label: 'Dossier personnel', path: SPACE_HOME }, { label: 'C:', path: 'C:\\' }, { label: 'G:', path: 'G:\\' }] };
+    if (busy) throw new Error('une analyse ou un nettoyage est déjà en cours');
+    busy = true; cancelled = false;
+    try {
+      const l = spaceList(p);
+      const steps = Math.min(l.entries.length, 12);
+      for (let i = 0; i < steps; i++) {
+        await scaled(spaceKnown.has(p + '#vu') ? 5 : 160);
+        if (cancelled) throw new Error('analyse annulée');
+        send({ event: 'progress', data: { phase: 'space', done: i + 1, total: steps, label: l.entries[i].name } });
+      }
+      spaceKnown.set(p + '#vu', 1);
+      return l;
+    } finally { busy = false; }
+  },
   apps: async () => { await scaled(900); return { apps: APPS, tracking: true }; },
   startup: async () => { await scaled(150); return STARTUP; },
   async 'startup.set'({ id, enabled }) {

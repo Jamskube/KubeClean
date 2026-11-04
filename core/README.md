@@ -12,6 +12,7 @@ Moteur Rust `kubeclean-core.exe` : analyse et nettoyage du disque, piloté en JS
 | `src/rules.rs` | Chargement des règles |
 | `src/fsutil.rs` | Utilitaires fichiers : détection des liens (reparse), dates, variables d’environnement |
 | `src/store.rs` | Persistance (historique, réglages) |
+| `src/space.rs` | Cartographie de l’espace (méthode `space`) : taille de chaque élément d’un dossier, lecture seule, mémoire des sous-dossiers déjà mesurés ; ni lien, ni autre volume, ni stockage du téléphone ; paquets Mac mesurés par `du` |
 | `src/apps.rs` | Applications installées (dernière ouverture, taille, plantages), désinstallation, démarrage, mises à jour ; `apps/win.rs` (registre Uninstall, Store, UserAssist, WER, StartupApproved, winget) et `apps/mac.rs` (/Applications, Spotlight, ~/Library, DiagnosticReports, launchctl) |
 | `src/win.rs` | API Windows (Corbeille, UAC, processus, registre), module `os` sous Windows |
 | `src/mac.rs` | API macOS (volume de démarrage, processus, Corbeille par NSFileManager chargé à l’exécution), module `os` sous macOS ; aucune tâche admin |

@@ -29,7 +29,7 @@ Context for AI coding assistants. Read at the start of every session.
 ## Architecture
 | Folder | Purpose |
 |---|---|
-| `core/` | Moteur Rust : analyse (`scan.rs`), nettoyage (`clean.rs`), règles (`rules.rs`, `rules/default.json` Windows, `rules/macos.json` Mac), système (`win.rs` / `mac.rs`, module `os`) |
+| `core/` | Moteur Rust : analyse (`scan.rs`), nettoyage (`clean.rs`), applications (`apps.rs`), espace (`space.rs`), règles (`rules.rs`, `rules/default.json` Windows, `rules/macos.json` Mac), système (`win.rs` / `mac.rs`, module `os`) |
 | `app/` | Electron (`electron/`), vues Svelte (`src/`), scripts dev (`scripts/`), docs design (`docs/`) |
 | `legacy/` | v1 Node.js + page web locale — référence, ne plus faire évoluer |
 | `docs/` | Journal de session (`journal/`), pointeur `_next-session.md` |

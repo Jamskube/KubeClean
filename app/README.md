@@ -69,6 +69,11 @@ Corbeille (Mac) ; « Réinitialiser » (Mac) n’envoie que les données. Toujou
 confirmation, jamais pendant une analyse ou un nettoyage. Les icônes viennent de
 `app.getFileIcon` côté Electron.
 
+La page Espace disque (`Space.svelte`) cartographie le dossier personnel ou un disque :
+treemap « squarified » des 40 plus gros éléments, liste détaillée, fil d’Ariane. Lecture
+seule : un dossier s’ouvre d’un clic, un fichier s’affiche dans l’Explorateur ou le Finder.
+Le moteur tourne en priorité basse pour que la fenêtre reste fluide pendant ses parcours.
+
 - `npm run icon` : compose le motif sur une tuile blanche, vérifie l’absence de
   tache au centre et régénère les PNG et l’ICO (16, 24, 32, 48, 64, 128, 256 px).
 - `npm run check` puis `npm run build` : vérifie Svelte et compile l’interface.

@@ -18,7 +18,7 @@ const CORE = app.isPackaged
   ? path.join(process.resourcesPath, CORE_NAME)
   : path.join(here, '..', '..', 'core', 'target', 'release', CORE_NAME);
 const ORIGIN = 'app://kubeclean';
-const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history', 'apps', 'apps.uninstall', 'apps.reset', 'startup', 'startup.set', 'updates', 'updates.install']);
+const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history', 'apps', 'apps.uninstall', 'apps.reset', 'startup', 'startup.set', 'updates', 'updates.install', 'space']);
 
 if (!app.requestSingleInstanceLock()) app.quit(); // two engines cleaning the same disk: never
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
@@ -37,6 +37,8 @@ function startCore() {
   const p = process.env.KC_MOCK
     ? spawn(process.execPath, [path.join(here, '..', 'scripts', 'mock-core.mjs')], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } })
     : spawn(CORE, ['--data-dir', app.getPath('userData')], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true });
+  // the engine walks disks on every core: below normal, the window keeps painting during a scan
+  try { if (p.pid) os.setPriority(p.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
   readline.createInterface({ input: p.stdout }).on('line', (line) => {
     let m;
     try { m = JSON.parse(line); } catch { return; }
@@ -80,7 +82,7 @@ ipcMain.handle('core', (e, method, params) => {
   // a folder read can block in the kernel (macOS waits on its permission prompt) and never see the
   // cancel flag: a scan changes nothing on disk, so ending the engine is safe. Never during a clean.
   if (method === 'cancel') {
-    const scans = [...methods].filter(([, m]) => m === 'scan').map(([id]) => id); // only the scans running now
+    const scans = [...methods].filter(([, m]) => m === 'scan' || m === 'space').map(([id]) => id); // only the read-only walks running now
     setTimeout(() => {
       const running = [...methods.values()];
       if (core && scans.some((id) => methods.has(id)) && !running.includes('clean')) { stopping = true; core.kill('SIGKILL'); }

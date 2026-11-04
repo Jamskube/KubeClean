@@ -106,6 +106,8 @@
         {#each A.unused.slice(0, 8) as a (a.id)}<div class="kc-preview-category"><Icon name="app-window" /><span>{a.name}</span><strong>{fmt(a.size + a.data)}</strong></div>{/each}
         {#if A.unstable.length}<section class="kc-preview-section"><h3>Plantages récents</h3><p class="kc-preview-caption">{A.unstable.slice(0, 5).map((a) => a.name).join(' · ')}</p></section>{/if}
       {:else}<p class="kc-preview-empty">{A.loading ? 'Lecture des applications…' : 'La liste se charge à l’ouverture de la page.'}</p>{/if}
+    {:else if page.id === 'space'}
+      <p class="kc-preview-caption">Ce qui occupe ton dossier personnel et tes disques, dossier par dossier. Lecture seule.</p>
     {:else if page.id === 'history'}
       <div class="kc-preview-summary"><span>{plural(S.history.length, 'nettoyage', 'nettoyages')}</span><strong>{fmt(S.history.reduce((sum, entry) => sum + Math.max(0, entry.diskGain), 0))} regagnés</strong></div>
       <p class="kc-preview-caption">Les plus récents d’abord. Chaque bilan indique la variation réelle d’espace libre.</p>

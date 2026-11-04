@@ -174,14 +174,13 @@ impl Mask {
     }
 }
 
-fn read_dir_sorted(dir: &Path) -> Vec<(PathBuf, Metadata)> {
+/// Entrées d'un dossier avec leurs métadonnées SANS suivre les liens. Windows les donne avec
+/// l'énumération (attributs dont le point d'analyse, tailles, dates) : aucune ouverture de fichier,
+/// cinq fois plus rapide. macOS fait un lstat, comme `symlink_metadata`.
+/// Le nettoyage, lui, relit chaque élément juste avant d'y toucher.
+pub fn read_dir_md(dir: &Path) -> Vec<(PathBuf, Metadata)> {
     let Ok(rd) = fs::read_dir(dir) else { return vec![] };
-    rd.filter_map(|e| e.ok())
-        .filter_map(|e| {
-            let p = e.path();
-            fs::symlink_metadata(&p).ok().map(|m| (p, m))
-        })
-        .collect()
+    rd.filter_map(|e| e.ok()).filter_map(|e| e.metadata().ok().map(|m| (e.path(), m))).collect()
 }
 
 /// Expand a rule path with wildcard segments (`User Data/*/Cache`) into the
@@ -205,7 +204,7 @@ pub fn resolve_paths(pattern: &str) -> Vec<PathBuf> {
         let mut next = vec![];
         for b in &bases {
             if seg.contains('*') || seg.contains('?') {
-                for (p, md) in read_dir_sorted(b) {
+                for (p, md) in read_dir_md(b) {
                     let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                     if md.is_dir() && !is_reparse(&md) && wildcard(seg, &name) {
                         next.push(p);
@@ -235,19 +234,24 @@ pub struct TreeStat {
 
 pub fn tree_stat(p: &Path, cancel: &AtomicBool) -> TreeStat {
     let Ok(md) = fs::symlink_metadata(p) else { return TreeStat::default() };
-    if is_reparse(&md) {
+    tree_stat_md(p, &md, cancel)
+}
+
+/// `tree_stat` quand les métadonnées de `p` (sans suivre de lien) sont déjà lues.
+pub fn tree_stat_md(p: &Path, md: &Metadata, cancel: &AtomicBool) -> TreeStat {
+    if is_reparse(md) {
         return TreeStat::default();
     }
     if !md.is_dir() {
-        return TreeStat { size: md.len(), newest: item_time(&md), files: 1 };
+        return TreeStat { size: md.len(), newest: item_time(md), files: 1 };
     }
     if cancel.load(Ordering::Relaxed) {
         return TreeStat::default();
     }
-    let own = item_time(&md);
-    read_dir_sorted(p)
+    let own = item_time(md);
+    read_dir_md(p)
         .into_par_iter()
-        .map(|(c, _)| tree_stat(&c, cancel))
+        .map(|(c, m)| tree_stat_md(&c, &m, cancel))
         .reduce(
             || TreeStat { size: 0, newest: own, files: 0 },
             |a, b| TreeStat { size: a.size + b.size, newest: a.newest.max(b.newest), files: a.files + b.files },
@@ -274,7 +278,7 @@ pub fn walk_files(dir: &Path, depth: u32, o: &WalkOpts, cancel: &AtomicBool) -> 
     if cancel.load(Ordering::Relaxed) {
         return vec![];
     }
-    let entries = read_dir_sorted(dir);
+    let entries = read_dir_md(dir);
     let (dirs, files): (Vec<_>, Vec<_>) = entries.into_iter().filter(|(_, m)| !is_reparse(m)).partition(|(_, m)| m.is_dir());
     let mut out: Vec<FoundFile> = files
         .into_iter()
@@ -282,6 +286,10 @@ pub fn walk_files(dir: &Path, depth: u32, o: &WalkOpts, cancel: &AtomicBool) -> 
             let name = p.file_name()?.to_string_lossy().to_string();
             if o.mask.is_some_and(|m| !m.hit(&name)) { return None; }
             if o.exclude.is_some_and(|m| m.hit(&name)) || o.global_exclude.is_some_and(|m| m.hit(&name)) { return None; }
+            if o.cutoff != 0 && item_time(&md) > o.cutoff { return None; }
+            // un fichier ouvert en écriture garde dans l'énumeration sa date d'ouverture : relu
+            // avant d'être proposé comme ancien (mesuré : 140 sur 731 000, tous en cours d'écriture)
+            let md = if o.cutoff != 0 { fs::symlink_metadata(&p).ok().filter(|m| !is_reparse(m) && m.is_file())? } else { md };
             let t = item_time(&md);
             if o.cutoff != 0 && t > o.cutoff { return None; }
             Some(FoundFile { path: p, size: md.len(), time: t })
@@ -353,7 +361,7 @@ pub fn delete_tree(p: &Path, cancel: &AtomicBool) -> DelStats {
         }
         return st;
     }
-    for (c, _) in read_dir_sorted(p) {
+    for (c, _) in read_dir_md(p) {
         if cancel.load(Ordering::Relaxed) {
             st.skipped += 1;
             return st;
@@ -369,7 +377,7 @@ pub fn prune_empty_dirs(dir: &Path, exclude_dirs: &[PathBuf], cutoff: i64) {
     if !path_without_reparse(dir) {
         return;
     }
-    for (p, md) in read_dir_sorted(dir) {
+    for (p, md) in read_dir_md(dir) {
         if !md.is_dir() || is_reparse(&md) || exclude_dirs.iter().any(|x| same_path(x, &p)) {
             continue;
         }

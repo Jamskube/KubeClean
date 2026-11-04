@@ -1,5 +1,5 @@
 <script>
-  import { tick, onMount } from 'svelte';
+  import { tick, onMount, untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { S, CATS, catColor, MAC, OS } from './lib/state.svelte.js';
   import { fmt, drive } from './lib/fmt.js';
@@ -12,6 +12,7 @@
   import Files from './Files.svelte';
   import Apps from './Apps.svelte';
   import Space from './Space.svelte';
+  import { A } from './lib/apps.svelte.js';
   import History from './History.svelte';
   import Settings from './Settings.svelte';
   import Result from './Result.svelte';
@@ -78,6 +79,9 @@
   // category bars stretch from 0 on the first frame, then follow their value
   let armed = $state(false);
   onMount(() => requestAnimationFrame(() => (armed = true)));
+  // la liste des applis demande quelques secondes au système : préparée dès la fin de l'analyse,
+  // jamais pendant (les deux liraient le disque en même temps), la page s'ouvre aussitôt
+  $effect(() => { if (S.scan && !S.busy) untrack(() => A.load()); });
 
   async function go(view, cat) {
     closePreviews();

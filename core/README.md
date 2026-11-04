@@ -35,3 +35,12 @@ Ces contrôles restent conservateurs et fondés sur les métadonnées, sans calc
 d’empreinte du contenu ni garantie atomique contre une modification concurrente.
 Les tests travaillent dans des dossiers temporaires. Le test de Corbeille réelle
 reste ignoré par défaut.
+
+## Vitesse des parcours
+
+Les parcours (`fsutil::read_dir_md`) prennent les métadonnées de l’énumération
+du dossier, sans ouvrir chaque fichier : sous Windows c’est cinq à dix fois plus
+rapide, sous macOS c’est le même `lstat`. L’énumération peut dater un fichier
+ouvert en écriture de son ouverture : un fichier proposé comme « ancien », un
+gros fichier et la racine d’un élément de dossier sont donc relus avant d’être
+listés, comme la revérification les relira.

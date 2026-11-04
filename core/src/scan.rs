@@ -94,10 +94,9 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
             let mut cands: Vec<Item> = roots
                 .par_iter()
                 .flat_map(|r| {
-                    let ents: Vec<_> = fs::read_dir(r).map(|rd| rd.filter_map(|e| e.ok()).map(|e| e.path()).collect()).unwrap_or_default();
-                    ents.into_par_iter()
-                        .filter_map(|p| {
-                            let md = fs::symlink_metadata(&p).ok()?;
+                    read_dir_md(r)
+                        .into_par_iter()
+                        .filter_map(|(p, md)| {
                             let name = p.file_name()?.to_string_lossy().to_string();
                             if is_reparse(&md) || mask.as_ref().is_some_and(|m| !m.hit(&name)) {
                                 return None;
@@ -105,7 +104,7 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
                             if latest.as_ref().is_some_and(|l| !is_superseded(&name, l)) {
                                 return None;
                             }
-                            let s = tree_stat(&p, cx.cancel);
+                            let s = tree_stat(&p, cx.cancel); // racine relue comme still_valid la relira : même source, même date
                             (s.size > 0 && (cutoff == 0 || s.newest <= cutoff)).then(|| Item {
                                 path: p, size: s.size, newest: s.newest, is_dir: md.is_dir(), label: None,
                                 idle_days: Some((cx.now - s.newest) / DAY), default: true,
@@ -156,18 +155,16 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
                 let (mask, exclude) = (Mask::parse(rule.mask.as_deref()), Mask::parse(rule.exclude.as_deref()));
                 let cut = cx.now - rule.older_than_days.unwrap_or(cx.settings.downloads_older_than_days) as i64 * DAY;
                 roots = vec![dl.clone()];
-                let ents: Vec<PathBuf> = fs::read_dir(&dl).map(|rd| rd.filter_map(|e| e.ok()).map(|e| e.path()).collect()).unwrap_or_default();
-                items = ents
+                items = read_dir_md(&dl)
                     .into_par_iter()
-                    .filter_map(|p| {
-                        let md = fs::symlink_metadata(&p).ok()?;
+                    .filter_map(|(p, md)| {
                         let name = p.file_name()?.to_string_lossy().to_string();
                         if is_reparse(&md) || name.eq_ignore_ascii_case("desktop.ini") || (cfg!(unix) && name.starts_with('.'))
                             || mask.as_ref().is_some_and(|m| !m.hit(&name)) || exclude.as_ref().is_some_and(|m| m.hit(&name))
                         {
                             return None;
                         }
-                        let s = tree_stat(&p, cx.cancel);
+                        let s = tree_stat(&p, cx.cancel); // racine relue comme still_valid la relira : même source, même date
                         (s.size > 0 && s.newest <= cut).then(|| Item {
                             path: p, size: s.size, newest: s.newest, is_dir: md.is_dir(), label: None,
                             idle_days: Some((cx.now - s.newest) / DAY), default: false,
@@ -296,43 +293,42 @@ pub fn artifact_label(dir: &Path) -> Option<&'static str> {
 
 /// Last activity of a project: newest file outside its build folders and .git.
 fn project_activity(dir: &Path, depth: u32) -> i64 {
-    let Ok(rd) = fs::read_dir(dir) else { return 0 };
-    let mut newest = 0;
-    for e in rd.filter_map(|e| e.ok()) {
-        let p = e.path();
-        let Ok(md) = fs::symlink_metadata(&p) else { continue };
-        let name = e.file_name().to_string_lossy().to_string();
-        if is_reparse(&md) || name == ".git" || ARTIFACTS.iter().any(|a| a.name.eq_ignore_ascii_case(&name)) {
-            continue;
-        }
-        newest = newest.max(if md.is_dir() { if depth > 0 { project_activity(&p, depth - 1) } else { 0 } } else { mtime(&md) });
-    }
-    newest
+    read_dir_md(dir)
+        .into_par_iter()
+        .map(|(p, md)| {
+            let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            if is_reparse(&md) || name == ".git" || ARTIFACTS.iter().any(|a| a.name.eq_ignore_ascii_case(&name)) {
+                0
+            } else if md.is_dir() {
+                if depth > 0 { project_activity(&p, depth - 1) } else { 0 }
+            } else {
+                mtime(&md)
+            }
+        })
+        .max()
+        .unwrap_or(0)
 }
 
-fn find_artifacts(dir: &Path, depth: u32, out: &mut Vec<(PathBuf, &'static str)>, cancel: &AtomicBool) {
+fn find_artifacts(dir: &Path, depth: u32, cancel: &AtomicBool) -> Vec<(PathBuf, &'static str)> {
     if cancel.load(Ordering::Relaxed) {
-        return;
+        return vec![];
     }
-    let Ok(rd) = fs::read_dir(dir) else { return };
-    for e in rd.filter_map(|e| e.ok()) {
-        let p = e.path();
-        let Ok(md) = fs::symlink_metadata(&p) else { continue };
-        if !md.is_dir() || is_reparse(&md) {
-            continue;
-        }
-        if let Some(l) = artifact_label(&p) {
-            out.push((p, l));
-            continue;
-        }
-        let name = e.file_name().to_string_lossy().to_lowercase();
-        if SKIP_DIRS.contains(&name.as_str()) || name.starts_with('.') {
-            continue;
-        }
-        if depth > 0 {
-            find_artifacts(&p, depth - 1, out, cancel);
-        }
-    }
+    read_dir_md(dir)
+        .into_par_iter()
+        .flat_map(|(p, md)| {
+            if !md.is_dir() || is_reparse(&md) {
+                return vec![];
+            }
+            if let Some(l) = artifact_label(&p) {
+                return vec![(p, l)];
+            }
+            let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if depth == 0 || SKIP_DIRS.contains(&name.as_str()) || name.starts_with('.') {
+                return vec![];
+            }
+            find_artifacts(&p, depth - 1, cancel)
+        })
+        .collect()
 }
 
 pub fn scan_projects(roots: &[PathBuf], cx: &Ctx) -> Vec<Item> {
@@ -344,7 +340,7 @@ pub fn scan_projects(roots: &[PathBuf], cx: &Ctx) -> Vec<Item> {
             continue;
         }
         seen.push(r.clone());
-        find_artifacts(r, 8, &mut found, cx.cancel);
+        found.extend(find_artifacts(r, 8, cx.cancel));
     }
     let idle_days = cx.settings.project_idle_days as i64;
     let mut items: Vec<Item> = found
@@ -374,9 +370,8 @@ fn large_files(dir: &Path, skip: &[PathBuf], min: u64, depth: u32, dev: u64, can
     if cancel.load(Ordering::Relaxed) || skip.iter().any(|s| same_path(s, dir)) {
         return vec![];
     }
-    let Ok(rd) = fs::read_dir(dir) else { return vec![] };
-    let ents: Vec<(PathBuf, fs::Metadata)> = rd.filter_map(|e| e.ok()).filter_map(|e| { let p = e.path(); fs::symlink_metadata(&p).ok().map(|m| (p, m)) }).collect();
-    ents.into_par_iter()
+    read_dir_md(dir)
+        .into_par_iter()
         .flat_map(|(p, md)| {
             if is_reparse(&md) {
                 return vec![];
@@ -390,6 +385,8 @@ fn large_files(dir: &Path, skip: &[PathBuf], min: u64, depth: u32, dev: u64, can
                 }
                 large_files(&p, skip, min, depth - 1, dev, cancel)
             } else if md.len() >= min {
+                // peu nombreux : relus, l'énumération ne suit pas un fichier ouvert en écriture
+                let Some(md) = fs::symlink_metadata(&p).ok().filter(|m| m.is_file() && !is_reparse(m) && m.len() >= min) else { return vec![] };
                 let t = mtime(&md);
                 vec![Item { newest: t, size: md.len(), path: p, is_dir: false, label: None, idle_days: Some((now_ms() - t) / DAY), default: false }]
             } else {

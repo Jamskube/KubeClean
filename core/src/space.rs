@@ -2,7 +2,7 @@
 //! jamais de lien ni de jonction, jamais un autre volume ; sur Mac un paquet (.app, .photoslibrary…)
 //! est mesuré d'un bloc par `du`, sans être parcouru.
 
-use crate::fsutil::{device, is_clean_abs, is_reparse, path_without_reparse};
+use crate::fsutil::{device, is_clean_abs, is_reparse, path_without_reparse, read_dir_md};
 use rayon::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -76,14 +76,6 @@ fn phone(p: &Path) -> bool {
     cfg!(windows) && p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("CrossDevice")) && std::env::var_os("USERPROFILE").is_some_and(|h| p.parent().is_some_and(|d| d.as_os_str().eq_ignore_ascii_case(&h)))
 }
 
-fn entries(dir: &Path) -> Vec<(PathBuf, std::fs::Metadata)> {
-    let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
-    rd.flatten()
-        // Windows : métadonnées de l'énumération elle-même, sans rouvrir chaque fichier (lien non suivi)
-        .filter_map(|e| e.metadata().ok().map(|m| (e.path(), m)))
-        .collect()
-}
-
 /// (taille, fichiers) d'un élément ; les dossiers peu profonds sont notés dans `memo`.
 fn measure(p: &Path, md: &std::fs::Metadata, dev: u64, depth: u32, cancel: &AtomicBool, memo: &Mutex<Vec<(String, (u64, u64))>>) -> (u64, u64) {
     if is_reparse(md) || cancel.load(Ordering::Relaxed) {
@@ -98,7 +90,7 @@ fn measure(p: &Path, md: &std::fs::Metadata, dev: u64, depth: u32, cancel: &Atom
     if is_package(p) {
         return (package_size(p), 1);
     }
-    let r = entries(p)
+    let r = read_dir_md(p)
         .into_par_iter()
         .map(|(c, m)| measure(&c, &m, dev, depth + 1, cancel, memo))
         .reduce(|| (0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
@@ -138,7 +130,7 @@ pub fn list(path: &str, refresh: bool, cancel: &AtomicBool, progress: &(dyn Fn(u
             m.retain(|x, _| !x.starts_with(&k));
         }
     }
-    let ents = entries(&p);
+    let ents = read_dir_md(&p);
     let (total, done) = (ents.len(), AtomicUsize::new(0));
     let memo = Mutex::new(vec![]);
     let cached = |c: &Path| MEMO.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|m| m.get(&key(c)).copied());

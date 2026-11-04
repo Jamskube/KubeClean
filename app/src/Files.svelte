@@ -37,6 +37,8 @@
   let tab = $state('largeFiles');
   let types = $state(new Set());
   let sort = $state('size'); // size | age | name
+  let age = $state(0); // jours sans modification au minimum : 0 | 30 | 365
+  const AGES = [[0, 'Tout âge'], [30, '+ 1 mois'], [365, '+ 1 an']];
   let q = $state('');
   let introOff = $state(read(INTRO_KEY));
 
@@ -46,7 +48,7 @@
   const counts = $derived.by(() => { const c = {}; for (const it of items) { const t = typeOf(it.path).id; c[t] = (c[t] ?? 0) + 1; } return c; });
   const shown = $derived.by(() => {
     const needle = q.trim().toLowerCase();
-    const list = items.filter((it) => (!types.size || types.has(typeOf(it.path).id)) && (!needle || name(it.path).toLowerCase().includes(needle)));
+    const list = items.filter((it) => (it.idleDays ?? 0) >= age && (!types.size || types.has(typeOf(it.path).id)) && (!needle || name(it.path).toLowerCase().includes(needle)));
     if (sort === 'age') list.sort((a, b) => (b.idleDays ?? -1) - (a.idleDays ?? -1));
     else if (sort === 'name') list.sort((a, b) => name(a.path).localeCompare(name(b.path), 'fr'));
     else list.sort((a, b) => b.size - a.size);
@@ -54,10 +56,10 @@
   });
   const pickedN = $derived(S.rules.filter((r) => r.toRecycle).reduce((n, r) => n + Object.keys(S.sel[r.id]?.set ?? {}).length, 0));
   const pickedSize = $derived(S.rules.filter((r) => r.toRecycle).reduce((n, r) => n + S.selSize(r), 0));
-  const filtered = $derived(types.size > 0 || q.trim().length > 0);
+  const filtered = $derived(types.size > 0 || q.trim().length > 0 || age > 0);
 
   const toggleType = (id) => { const s = new Set(types); s.has(id) ? s.delete(id) : s.add(id); types = s; };
-  const reset = () => { types = new Set(); q = ''; };
+  const reset = () => { types = new Set(); q = ''; age = 0; };
   const ruleTotal = (id) => S.rule(id)?.size ?? 0;
   const ruleCount = (id) => S.rule(id)?.items?.length ?? 0;
   const dismiss = () => { try { sessionStorage.setItem(INTRO_KEY, '1'); } catch {} setTimeout(() => (introOff = true), 300); };
@@ -130,6 +132,10 @@
             {/each}
           </div>
           <div class="kc-tools">
+            <div class="k-seg k-seg--sm" role="radiogroup" data-kube="segmented" aria-label="Non modifiés depuis">
+              <span class="k-seg__thumb" aria-hidden="true"></span>
+              {#each AGES as [d, label] (d)}<button class="k-seg__item" type="button" role="radio" data-value={d} data-age={d} aria-checked={age === d} title={d ? `Non modifiés depuis plus ${d === 30 ? 'd’un mois' : 'd’un an'}` : undefined} onclick={() => (age = d)}>{label}</button>{/each}
+            </div>
             <div class="k-seg k-seg--sm" role="radiogroup" data-kube="segmented" aria-label="Trier">
               <span class="k-seg__thumb" aria-hidden="true"></span>
               <button class="k-seg__item" type="button" role="radio" data-value="size" aria-checked={sort === 'size'} onclick={() => (sort = 'size')}>Taille</button>

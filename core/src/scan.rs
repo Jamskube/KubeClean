@@ -71,7 +71,9 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
     match rule.kind {
         Kind::Files => {
             let (mask, exclude) = (Mask::parse(rule.mask.as_deref()), Mask::parse(rule.exclude.as_deref()));
-            let exclude_dirs: Vec<PathBuf> = rule.exclude_dirs.iter().filter_map(|d| expand_env(d)).collect();
+            // jokers admis (« Containers/com.apple.* ») ; une racine sous un dossier exclu n'est pas parcourue
+            let exclude_dirs: Vec<PathBuf> = rule.exclude_dirs.iter().flat_map(|d| resolve_paths(d)).collect();
+            roots.retain(|r| !exclude_dirs.iter().any(|x| same_path(x, r) || is_under(r, x)));
             let o = WalkOpts {
                 depth: rule.depth.unwrap_or(50),
                 mask: mask.as_ref(),
@@ -150,7 +152,9 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
         }
         Kind::OldDownloads => {
             if let Some(dl) = expand_env(&format!("{HOME}/Downloads")) {
-                let cut = cx.now - cx.settings.downloads_older_than_days as i64 * DAY;
+                // une règle peut viser certains types (installeurs .dmg) à tout âge, ou les écarter
+                let (mask, exclude) = (Mask::parse(rule.mask.as_deref()), Mask::parse(rule.exclude.as_deref()));
+                let cut = cx.now - rule.older_than_days.unwrap_or(cx.settings.downloads_older_than_days) as i64 * DAY;
                 roots = vec![dl.clone()];
                 let ents: Vec<PathBuf> = fs::read_dir(&dl).map(|rd| rd.filter_map(|e| e.ok()).map(|e| e.path()).collect()).unwrap_or_default();
                 items = ents
@@ -158,7 +162,9 @@ pub fn scan_rule(rule: &Rule, cx: &Ctx) -> RuleScan {
                     .filter_map(|p| {
                         let md = fs::symlink_metadata(&p).ok()?;
                         let name = p.file_name()?.to_string_lossy().to_string();
-                        if is_reparse(&md) || name.eq_ignore_ascii_case("desktop.ini") || (cfg!(unix) && name.starts_with('.')) {
+                        if is_reparse(&md) || name.eq_ignore_ascii_case("desktop.ini") || (cfg!(unix) && name.starts_with('.'))
+                            || mask.as_ref().is_some_and(|m| !m.hit(&name)) || exclude.as_ref().is_some_and(|m| m.hit(&name))
+                        {
                             return None;
                         }
                         let s = tree_stat(&p, cx.cancel);

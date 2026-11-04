@@ -173,7 +173,7 @@ fn clean_with(
                     rep.recycled += gone.len() as u64;
                 }
                 if s.rule.kind == Kind::Files {
-                    let excl: Vec<PathBuf> = s.rule.exclude_dirs.iter().filter_map(|d| expand_env(d)).collect();
+                    let excl: Vec<PathBuf> = s.rule.exclude_dirs.iter().flat_map(|d| resolve_paths(d)).collect();
                     for r in &s.roots {
                         prune_empty_dirs(r, &excl, s.cutoff);
                     }
@@ -334,6 +334,20 @@ mod tests {
             assert!(!still_valid(&s, &item, &settings, &cancel));
         }
         assert!(path.exists());
+    }
+
+    #[test]
+    fn exclusion_par_joker_ecarte_des_racines_entieres() {
+        let t = tempfile::tempdir().unwrap();
+        w(&t.path().join("com.apple.mail/Caches/a"), "x");
+        w(&t.path().join("com.spotify.client/Caches/b"), "x");
+        let base = t.path().display();
+        let r = rule(serde_json::json!({ "id": "t", "cat": "x", "title": "t", "kind": "files",
+            "paths": [format!("{base}/*/Caches")], "excludeDirs": [format!("{base}/com.apple.*")] }));
+        let (settings, cancel) = (Settings::default(), AtomicBool::new(false));
+        let s = scan_rule(&r, &future_ctx(&settings, &cancel));
+        assert_eq!(names(&s), ["b"]);
+        assert_eq!(s.roots.len(), 1);
     }
 
     #[test]

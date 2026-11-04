@@ -32,8 +32,19 @@
       "kind": "files", "depth": 10, "apps": ["firefox"], "default": true,
       "paths": ["%HOME%/Library/Caches/Firefox/Profiles/*/cache2"] },
 
+    { "id": "containerCaches", "cat": "apps", "title": "Caches des apps de l’App Store", "hint": "Les apps de l’App Store rangent leur cache dans leur propre conteneur. Fichiers non modifiés depuis 7 jours, hors apps d’Apple",
+      "kind": "files", "paths": ["%HOME%/Library/Containers/*/Data/Library/Caches"], "depth": 30, "olderThanDays": 7, "default": true,
+      "excludeDirs": ["%HOME%/Library/Containers/com.apple.*"] },
+    { "id": "webAppCaches", "cat": "apps", "title": "Slack, Discord, Teams, WhatsApp… : caches web", "hint": "Apps de bureau construites sur Chromium : Cache, Code Cache et GPUCache, non modifiés depuis 7 jours. Messages et réglages ne sont pas touchés",
+      "kind": "files", "depth": 10, "olderThanDays": 7, "default": true,
+      "paths": ["%HOME%/Library/Application Support/*/Cache/Cache_Data", "%HOME%/Library/Application Support/*/Code Cache",
+                "%HOME%/Library/Application Support/*/GPUCache", "%HOME%/Library/Application Support/*/DawnGraphiteCache",
+                "%HOME%/Library/Application Support/*/DawnWebGPUCache"] },
     { "id": "spotifyCache", "cat": "apps", "title": "Spotify : cache d’écoute", "hint": "Musique déjà écoutée en streaming. Les titres téléchargés hors connexion ne sont pas touchés",
-      "kind": "files", "paths": ["%HOME%/Library/Caches/com.spotify.client"], "depth": 10, "apps": ["spotify"], "default": true },
+      "kind": "files", "paths": ["%HOME%/Library/Caches/com.spotify.client", "%HOME%/Library/Application Support/Spotify/PersistentCache/Storage"],
+      "depth": 10, "apps": ["spotify"], "default": true },
+    { "id": "telegramCache", "cat": "apps", "title": "Telegram : médias en cache", "hint": "Photos et vidéos déjà vues, retéléchargées depuis Telegram si besoin",
+      "kind": "files", "paths": ["%HOME%/Library/Application Support/Telegram Desktop/tdata/user_data"], "depth": 10, "apps": ["telegram"], "default": true },
     { "id": "adobeMediaCache", "cat": "apps", "title": "Adobe : cache média", "hint": "Aperçus et audio conformé de Premiere et After Effects, plus vieux de 30 jours. Recréés à l’ouverture d’un projet",
       "kind": "files", "paths": ["%HOME%/Library/Application Support/Adobe/Common/Media Cache Files", "%HOME%/Library/Application Support/Adobe/Common/Media Cache"],
       "depth": 5, "olderThanDays": 30, "default": true },
@@ -41,6 +52,8 @@
     { "id": "largeFiles", "cat": "files", "title": "Gros fichiers", "hint": "Fichiers volumineux dans ton dossier personnel, hors Bibliothèque, Applications et photothèque. Envoyés à la Corbeille, jamais cochés d’office",
       "kind": "largeFiles", "default": false },
     { "id": "oldDownloads", "cat": "files", "title": "Vieux téléchargements", "hint": "Éléments du dossier Téléchargements pas touchés depuis longtemps. Envoyés à la Corbeille",
-      "kind": "oldDownloads", "default": false }
+      "kind": "oldDownloads", "exclude": "*.dmg;*.pkg;*.mpkg", "default": false },
+    { "id": "installers", "cat": "files", "title": "Installeurs téléchargés", "hint": "Fichiers .dmg et .pkg du dossier Téléchargements : une fois l’app installée, ils ne servent plus. Envoyés à la Corbeille",
+      "kind": "oldDownloads", "mask": "*.dmg;*.pkg;*.mpkg", "olderThanDays": 0, "default": false }
   ]
 }

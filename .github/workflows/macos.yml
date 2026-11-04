@@ -90,3 +90,22 @@ jobs:
             shot.png
             launch.log
           if-no-files-found: warn
+
+      # Analyse seule d'un dossier personnel d'essai : chaque règle doit y trouver exactement ses témoins,
+      # et rien chez Apple (com.apple.*) ni d'installeur parmi les vieux téléchargements.
+      - name: Règles sur un dossier personnel d'essai
+        working-directory: app
+        run: |
+          H="$RUNNER_TEMP/home-essai"
+          for f in "Downloads/Essai.dmg" "Downloads/vieux.pdf" \
+                   "Library/Containers/org.example.essai/Data/Library/Caches/a.bin" \
+                   "Library/Containers/com.apple.essai/Data/Library/Caches/b.bin" \
+                   "Library/Application Support/EssaiChat/Cache/Cache_Data/c.bin"; do
+            mkdir -p "$(dirname "$H/$f")"; head -c 1048576 /dev/zero > "$H/$f"; touch -t 202601010000 "$H/$f"
+          done
+          HOME="$H" node scripts/core-smoke.mjs "release/mac-arm64/KubeClean.app/Contents/Resources/kubeclean-core" "$RUNNER_TEMP/kc-data-essai" | tee essai.txt
+          n() { awk -v id="$1" '$2 == id { print $3 }' essai.txt; }
+          for e in installers=1 oldDownloads=1 containerCaches=1 webAppCaches=1 userCaches=0; do
+            test "$(n "${e%=*}")" = "${e#*=}" || { echo "attendu $e, obtenu $(n "${e%=*}")"; exit 1; }
+          done
+          echo "Règles conformes sur le dossier d'essai"

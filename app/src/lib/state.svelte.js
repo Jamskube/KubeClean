@@ -54,6 +54,9 @@ class App {
   drives = $state.raw([]);
   busy = $state(''); // '' | scan | clean
   progress = $state.raw(null); // {phase, done, total, label, freed?}
+  /** carte de l'espace : une lecture à part, qui tourne à côté d'une analyse ou d'un nettoyage */
+  measuring = $state(false);
+  spaceProgress = $state.raw(null);
   progressAt = 0; // time of the last progress event, for the stalled-scan hint (not reactive)
   runMini = $state(false); // clean progress reduced to a corner card: the app stays navigable
   /** rule id -> { all, set: {index: size} }: all=true means "everything except set" */
@@ -72,7 +75,8 @@ class App {
     document.documentElement.dataset.platform = MAC ? 'mac' : 'win';
     kc.onBackdrop((b) => { document.documentElement.dataset.windowBackdrop = b; });
     kc.onEvent((m) => {
-      if (m.event === 'progress') { this.progress = m.data; this.progressAt = Date.now(); }
+      if (m.event === 'progress' && m.data.phase === 'space') this.spaceProgress = m.data;
+      else if (m.event === 'progress') { this.progress = m.data; this.progressAt = Date.now(); }
       else if (m.event === 'rule') this.live = [...this.live, m.data];
       else if (m.event === 'core-exit') {
         this.busy = '';

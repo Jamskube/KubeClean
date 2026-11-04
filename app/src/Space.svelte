@@ -41,14 +41,14 @@
   const current = $derived(M.stack.at(-1));
   const tiles = $derived(M.listing ? squarify(M.listing.entries.filter((e) => e.size > 0).slice(0, 40), mapW, MAP_H) : []);
   const max = $derived(M.listing?.entries[0]?.size || 1);
-  const progress = $derived(S.busy === 'space' && S.progress?.phase === 'space' ? S.progress : null);
+  const progress = $derived(M.loading ? S.spaceProgress : null);
 
   async function open(path, label, push = true, refresh = false) {
-    if (S.busy) return;
+    if (M.loading) return;
     M.error = '';
     M.loading = true;
-    S.busy = 'space';
-    S.progress = null;
+    S.measuring = true;
+    S.spaceProgress = null;
     try {
       const l = await kc.call('space', { path, refresh });
       M.listing = l;
@@ -57,7 +57,7 @@
       M.error = e.message === 'analyse annulée' ? '' : e.message;
     } finally {
       M.loading = false;
-      S.busy = '';
+      S.measuring = false;
     }
   }
   function crumb(i) {
@@ -91,7 +91,7 @@
       </div>
       {#if current}
         <div class="k-page-header__actions">
-          <button class="k-btn k-btn--ghost k-btn--sm" type="button" disabled={!!S.busy} onclick={() => open(current.path, current.label, false, true)}><Icon name="refresh-cw" />Actualiser</button>
+          <button class="k-btn k-btn--ghost k-btn--sm" type="button" disabled={M.loading} onclick={() => open(current.path, current.label, false, true)}><Icon name="refresh-cw" />Actualiser</button>
         </div>
       {/if}
     </div>
@@ -100,7 +100,7 @@
   {#if M.roots}
     <div class="kc-roots" role="group" aria-label="Emplacement à cartographier">
       {#each M.roots as r (r.path)}
-        <button class="k-btn k-btn--sm k-btn--pill {M.stack[0]?.path === r.path ? 'k-btn--accent-subtle' : ''}" type="button" data-root={r.path} disabled={!!S.busy} aria-pressed={M.stack[0]?.path === r.path} onclick={() => root(r)}>
+        <button class="k-btn k-btn--sm k-btn--pill {M.stack[0]?.path === r.path ? 'k-btn--accent-subtle' : ''}" type="button" data-root={r.path} disabled={M.loading} aria-pressed={M.stack[0]?.path === r.path} onclick={() => root(r)}>
           <Icon name={r.label === 'Dossier personnel' ? 'house' : r.label === 'Applications' ? 'app-window' : 'hard-drive'} />{r.label}
         </button>
       {/each}
@@ -111,7 +111,7 @@
     <nav class="kc-crumbs" aria-label="Chemin">
       {#each M.stack as c, i (c.path)}
         {#if i}<Icon name="chevron-right" />{/if}
-        {#if i < M.stack.length - 1}<button class="k-btn k-btn--ghost k-btn--xs" type="button" disabled={!!S.busy} onclick={() => crumb(i)}>{c.label}</button>
+        {#if i < M.stack.length - 1}<button class="k-btn k-btn--ghost k-btn--xs" type="button" disabled={M.loading} onclick={() => crumb(i)}>{c.label}</button>
         {:else}<span class="kc-crumbs__here" aria-current="location">{c.label}</span>{/if}
       {/each}
     </nav>
@@ -120,7 +120,7 @@
   {#if M.loading}
     <div class="kc-measure" role="status">
       <div class="kc-measure__line"><span>{progress ? `Mesure… ${progress.done}/${progress.total} · ${progress.label}` : 'Mesure…'}</span>
-        <button class="k-btn k-btn--ghost k-btn--xs" type="button" onclick={() => S.cancel()}>Annuler</button></div>
+        <button class="k-btn k-btn--ghost k-btn--xs" type="button" onclick={() => kc.call('cancel', { what: 'space' }).catch(() => {})}>Annuler</button></div>
       <div class="k-progress k-progress--sm" role="progressbar" aria-label="Mesure du dossier" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress ? Math.round((progress.done / progress.total) * 100) : 0} style:--k-progress={progress ? progress.done / progress.total : 0}><div class="k-progress__bar"></div></div>
       <p class="kc-note">La première mesure d’un grand dossier peut prendre une minute ; les sous-dossiers s’ouvrent ensuite aussitôt.</p>
     </div>
@@ -134,8 +134,7 @@
           <h2 class="k-empty__title">Choisis un emplacement</h2>
           <p class="k-empty__desc">Ton dossier personnel ou un disque entier. KubeClean mesure chaque dossier sans rien modifier.</p>
         </div>
-        {#if M.roots?.length}<div class="k-empty__actions"><button class="k-btn k-btn--primary" type="button" disabled={!!S.busy} onclick={() => root(M.roots[0])}><Icon name="chart-pie" />Cartographier {M.roots[0].label.toLowerCase()}</button></div>{/if}
-        {#if S.busy === 'scan'}<p class="kc-note">Disponible dès la fin de l’analyse en cours.</p>{/if}
+        {#if M.roots?.length}<div class="k-empty__actions"><button class="k-btn k-btn--primary" type="button" disabled={M.loading} onclick={() => root(M.roots[0])}><Icon name="chart-pie" />Cartographier {M.roots[0].label.toLowerCase()}</button></div>{/if}
       </div>
     </div>
   {:else if !M.listing.entries.length}
@@ -145,7 +144,7 @@
       {#each tiles as t, i (t.it.path)}
         {@const share = t.it.size / M.listing.size}
         <button class="kc-tile" class:kc-tile--file={!t.it.isDir || t.it.package} type="button" style:left="{t.x}px" style:top="{t.y}px" style:width="{t.w}px" style:height="{t.h}px" style:--tone={tone(i, t.it)}
-          title="{t.it.name} · {fmt(t.it.size)} · {Math.round(share * 100)} %" aria-label="{t.it.name}, {fmt(t.it.size)}" disabled={!!S.busy} onclick={() => into(t.it)}>
+          title="{t.it.name} · {fmt(t.it.size)} · {Math.round(share * 100)} %" aria-label="{t.it.name}, {fmt(t.it.size)}" disabled={M.loading} onclick={() => into(t.it)}>
           {#if t.w > 70 && t.h > 34}<span class="kc-tile__name">{t.it.name}</span><span class="kc-tile__size">{fmt(t.it.size)}</span>{/if}
         </button>
       {/each}
@@ -155,7 +154,7 @@
       {#each M.listing.entries as e, i (e.path)}
         <li class="k-reveal kc-row">
           <span class="kc-row__icon" style:color={tone(i, e)}><Icon name={e.package ? 'package' : e.isDir ? 'folder' : 'file'} /></span>
-          <button class="kc-row__main" type="button" disabled={!!S.busy || !e.isDir || e.package} onclick={() => into(e)}>
+          <button class="kc-row__main" type="button" disabled={M.loading || !e.isDir || e.package} onclick={() => into(e)}>
             <span class="kc-row__name" title={e.path}>{e.name}</span>
             <span class="kc-row__bar" aria-hidden="true"><span style:width="{Math.max(0.5, (e.size / max) * 100)}%" style:background={tone(i, e)}></span></span>
           </button>

@@ -95,8 +95,8 @@
       const p = S.progress;
       return p ? `Analyse… ${p.done}/${p.total} · ${p.label}` : 'Analyse…';
     }
-    if (S.busy === 'space') return 'Mesure de l’espace…';
     if (S.busy === 'clean') return S.progress?.label ? `Nettoyage… ${S.progress.label}` : 'Nettoyage…';
+    if (S.measuring) return 'Mesure de l’espace…';
     if (!S.scan) return 'En attente du moteur';
     return `Analyse terminée · ${sec} s`;
   });
@@ -197,8 +197,8 @@
           <div class="k-split__main">
             <header class="kc-pane-header">
               <div class="kc-pane-header__title"><Icon name={currentView.icon} /><span>{currentView.label}</span></div>
-              <span class="kc-status__pill" class:kc-status__pill--live={!!S.busy} role="status">
-                {#if S.busy}<span class="k-dot-pulse" style:--k-dot-size="6px" style:--k-dot-color="var(--accent)"></span>
+              <span class="kc-status__pill" class:kc-status__pill--live={!!S.busy || S.measuring} role="status">
+                {#if S.busy || S.measuring}<span class="k-dot-pulse" style:--k-dot-size="6px" style:--k-dot-color="var(--accent)"></span>
                 {:else if S.scan}<Icon name="circle-check" />{/if}
                 <span class="kc-pane-header__status">{status}</span>
               </span>

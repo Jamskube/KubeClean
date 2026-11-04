@@ -120,6 +120,7 @@ if (WORST) history = Array.from({ length: 60 }, (_, i) => ({ at: now - (365 - i 
 let scans = null;
 let busy = false;
 let cancelled = false;
+let spaceBusy = false, spaceCancelled = false;
 
 // applications : [nom, éditeur, version, taille Mo, données Mo, dernière ouverture (jours, null = aucune trace), installée (jours), plantages, blocages, ouverte, composant]
 const MAC_MOCK = process.env.KC_PLATFORM === 'darwin';
@@ -208,19 +209,19 @@ let LEFTOVERS = [
 const appMethods = {
   async space({ path: p }) {
     if (!p) return { roots: MAC_MOCK ? [{ label: 'Dossier personnel', path: SPACE_HOME }, { label: 'Applications', path: '/Applications' }] : [{ label: 'Dossier personnel', path: SPACE_HOME }, { label: 'C:', path: 'C:\\' }, { label: 'G:', path: 'G:\\' }] };
-    if (busy) throw new Error('une analyse ou un nettoyage est déjà en cours');
-    busy = true; cancelled = false;
+    if (spaceBusy) throw new Error('une mesure est déjà en cours'); // comme le moteur : indépendante de l'analyse
+    spaceBusy = true; spaceCancelled = false;
     try {
       const l = spaceList(p);
       const steps = Math.min(l.entries.length, 12);
       for (let i = 0; i < steps; i++) {
         await scaled(spaceKnown.has(p + '#vu') ? 5 : 160);
-        if (cancelled) throw new Error('analyse annulée');
+        if (spaceCancelled) throw new Error('analyse annulée');
         send({ event: 'progress', data: { phase: 'space', done: i + 1, total: steps, label: l.entries[i].name } });
       }
       spaceKnown.set(p + '#vu', 1);
       return l;
-    } finally { busy = false; }
+    } finally { spaceBusy = false; }
   },
   async 'apps.leftovers'() {
     if (!MAC_MOCK) throw new Error('disponible sur macOS seulement');
@@ -276,7 +277,7 @@ const appMethods = {
 const methods = {
   hello: async () => ({ version: '0.1.0-mock', dataDir: 'C:\\mock', drives }),
   drives: async () => drives,
-  cancel: async () => { cancelled = true; return true; },
+  cancel: async (p) => { if (p?.what === 'space') spaceCancelled = true; else cancelled = true; return true; },
   async scan() {
     if (busy) throw new Error('une analyse ou un nettoyage est déjà en cours');
     busy = true; cancelled = false;

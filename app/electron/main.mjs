@@ -83,7 +83,8 @@ ipcMain.handle('core', (e, method, params) => {
   // a folder read can block in the kernel (macOS waits on its permission prompt) and never see the
   // cancel flag: a scan changes nothing on disk, so ending the engine is safe. Never during a clean.
   if (method === 'cancel') {
-    const scans = [...methods].filter(([, m]) => m === 'scan' || m === 'space').map(([id]) => id); // only the read-only walks running now
+    const walk = params?.what === 'space' ? 'space' : 'scan'; // the walk this cancel targets, the other one keeps going
+    const scans = [...methods].filter(([, m]) => m === walk).map(([id]) => id);
     setTimeout(() => {
       // tuer le moteur seulement si TOUT ce qui tourne est une lecture : une désinstallation, une mise
       // à jour ou un envoi à la Corbeille coupés en route laisseraient un état à moitié fait

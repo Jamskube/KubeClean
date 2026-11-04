@@ -35,6 +35,9 @@ struct Core {
     scans: Mutex<Vec<scan::RuleScan>>,
     cancel: AtomicBool,
     busy: AtomicBool,
+    /// la carte de l'espace ne fait que lire : elle tourne à côté d'une analyse ou d'un nettoyage
+    space_busy: AtomicBool,
+    space_cancel: AtomicBool,
     out: Mutex<std::io::Stdout>,
 }
 
@@ -72,7 +75,8 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
         "hello" => Ok(json!({ "version": env!("CARGO_PKG_VERSION"), "dataDir": c.data_dir(), "drives": os::fixed_drives() })),
         "drives" => Ok(json!(os::fixed_drives())),
         "cancel" => {
-            c.cancel.store(true, Ordering::SeqCst);
+            let space = params.get("what").and_then(Value::as_str) == Some("space");
+            (if space { &c.space_cancel } else { &c.cancel }).store(true, Ordering::SeqCst);
             Ok(json!(true))
         }
         "scan" => {
@@ -173,9 +177,13 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             struct P { path: Option<String>, #[serde(default)] refresh: bool }
             let p: P = serde_json::from_value(params).map_err(|e| e.to_string())?;
             let Some(path) = p.path else { return Ok(json!({ "roots": space::roots() })) };
-            let _b = take_busy(c)?;
+            if c.space_busy.swap(true, Ordering::SeqCst) {
+                return Err("une mesure est déjà en cours".into());
+            }
+            let _b = Busy(&c.space_busy);
+            c.space_cancel.store(false, Ordering::SeqCst);
             let progress = |done: usize, total: usize, label: &str| c.event("progress", json!({ "phase": "space", "done": done, "total": total, "label": label }));
-            space::list(&path, p.refresh, &c.cancel, &progress).map(|l| json!(l))
+            space::list(&path, p.refresh, &c.space_cancel, &progress).map(|l| json!(l))
         }
         "apps.leftovers" => apps::leftovers(),
         "apps.trashLeftovers" => {
@@ -211,6 +219,8 @@ fn main() {
         scans: Mutex::new(vec![]),
         cancel: AtomicBool::new(false),
         busy: AtomicBool::new(false),
+        space_busy: AtomicBool::new(false),
+        space_cancel: AtomicBool::new(false),
         out: Mutex::new(std::io::stdout()),
     });
     core.event("ready", json!({ "version": env!("CARGO_PKG_VERSION") }));
@@ -238,4 +248,5 @@ fn main() {
     }
     // stdin closed: Electron is gone. Stop any running work and leave.
     core.cancel.store(true, Ordering::SeqCst);
+    core.space_cancel.store(true, Ordering::SeqCst);
 }

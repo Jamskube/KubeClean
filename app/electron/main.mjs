@@ -106,6 +106,8 @@ ipcMain.handle('pick-folder', async (e) => {
 const MICA_OK = process.platform === 'win32' && Number(os.release().split('.')[2]) >= 22621;
 const mica = () => MICA_OK && nativeTheme.shouldUseDarkColors && !process.env.KC_MOCK;
 // macOS: the sidebar vibrancy material in both themes, under the same transparent chrome
+// Mac preview on Windows: acrylic blurs the desktop like macOS vibrancy does
+const material = () => (mica() ? 'mica' : PLATFORM === 'darwin' && MICA_OK ? 'acrylic' : 'none');
 const backdrop = () => (PLATFORM === 'darwin' ? 'glass' : mica() ? 'mica' : 'none');
 // the caption buttons sit straight on the header under Mica, and in the Mac preview (KC_PLATFORM=darwin)
 // whose glass header a solid button strip would interrupt
@@ -124,7 +126,7 @@ function createWindow() {
       // traffic lights centred in the 44px title bar
       ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 15 }, vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' }
       // set before the first show: applied later, the DWM can keep an opaque backdrop
-      : { backgroundColor: overlay().color, backgroundMaterial: mica() ? 'mica' : 'none', titleBarStyle: 'hidden', titleBarOverlay: overlay() }),
+      : { backgroundColor: overlay().color, backgroundMaterial: material(), titleBarStyle: 'hidden', titleBarOverlay: overlay() }),
     show: false,
     webPreferences: {
       preload: path.join(here, 'preload.cjs'),
@@ -169,7 +171,7 @@ app.whenReady().then(() => {
   nativeTheme.on('updated', () => {
     if (!win) return;
     if (!MAC) {
-      win.setBackgroundMaterial(mica() ? 'mica' : 'none');
+      win.setBackgroundMaterial(material());
       win.setBackgroundColor(overlay().color);
       win.setTitleBarOverlay(overlay());
     }

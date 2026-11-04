@@ -153,6 +153,7 @@ let APPS = APPS_SRC.map(([name, publisher, version, mb, data, used, inst, crashe
   id: MAC_MOCK ? `/Applications/${name}.app` : kind === 'store' ? `appx:${name.replace(/\W/g, '')}_1.0.0.0_arm64__8wekyb3d8bbwe` : `reg:1:{${name.replace(/\W/g, '')}}`,
   name, publisher, version, size: mb * MB, data: data * MB, installed: now - inst * DAY, lastUsed: used == null ? null : now - used * DAY,
   crashes, hangs, kind: MAC_MOCK ? 'mac' : kind ?? 'app', icon: null, running, system,
+  ...(MAC_MOCK && data ? { dataPaths: ['Application Support', 'Caches', 'Preferences'].map((d) => `/Users/marie/Library/${d}/com.example.${name.replace(/\W/g, '').toLowerCase()}`) } : {}),
 }));
 if (WORST) APPS = [...APPS, { id: 'reg:1:{long}', name: 'Northwind Industries Holdings — Portail Fournisseurs (édition entreprise, déploiement par machine) x64 FR', publisher: 'Northwind Industries Holdings International Software Division', version: '2026.10.31.4471-preview+build.88213', size: 1.24e12, data: 0, installed: now - 2000 * DAY, lastUsed: now - 1900 * DAY, crashes: 148, hangs: 37, kind: 'app', icon: null, running: false, system: false }];
 let STARTUP = MAC_MOCK ? [

@@ -258,6 +258,10 @@
           <p class="k-dialog__description">{confirmText(ask.kind, ask.app)}</p>
         </div>
       </div>
+      {#if MAC && ask.kind !== 'leftovers' && ask.app.dataPaths?.length}
+        <!-- ce qui part réellement à la Corbeille, dossier par dossier -->
+        <ul class="kc-ask__paths">{#each ask.app.dataPaths as p (p)}<li title={p}>{p.replace(/^\/Users\/[^/]+/, '~')}</li>{/each}</ul>
+      {/if}
       <div class="k-dialog__actions">
         <!-- svelte-ignore a11y_autofocus (action destructive : le focus démarre sur Annuler) -->
         <button class="k-btn" type="button" autofocus onclick={() => dlg.close()}>Annuler</button>
@@ -320,6 +324,8 @@
   .kc-row__trouble :global(.k-icon) { width: 12px; height: 12px; }
   .kc-row__pub, .kc-row__cmd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-tertiary); }
   .kc-scope { flex: none; }
+  .kc-ask__paths { margin: 0; padding: var(--space-2) var(--space-3); list-style: none; max-height: 9.5em; overflow: auto; border-radius: 8px; background: var(--surface-sunken, rgba(127, 127, 127, 0.08)); font: 12px/1.6 var(--font-mono, ui-monospace, monospace); color: var(--ink-secondary); }
+  .kc-ask__paths li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kc-row__meta { display: flex; align-items: center; gap: var(--space-2); flex: none; }
   .kc-row__actions { display: flex; gap: 2px; }
   .kc-row__size { font-size: 14px; font-weight: 510; color: var(--ink); min-width: 4.5em; text-align: end; font-variant-numeric: tabular-nums; }

@@ -188,6 +188,13 @@ struct Reg {
     icon: Option<PathBuf>,
 }
 
+/// Ce que la liste montre : un programme désinstallable, ni composant caché ni correctif.
+/// Rejoué avant toute désinstallation : l'identifiant venu de l'interface ne suffit pas.
+fn listed(k: &RegKey) -> bool {
+    let patch = k.string("ParentKeyName").is_some() || k.string("ReleaseType").is_some_and(|t| t.to_lowercase().contains("update") || t.eq_ignore_ascii_case("hotfix"));
+    k.string("DisplayName").is_some() && k.dword("SystemComponent") != Some(1) && !patch && k.string("UninstallString").is_some()
+}
+
 fn read_uninstall_entries() -> Vec<Reg> {
     let broad = too_broad();
     let mut out: Vec<Reg> = vec![];
@@ -195,11 +202,7 @@ fn read_uninstall_entries() -> Vec<Reg> {
         let Some(root) = RegKey::open(*hive, path) else { continue };
         for sub in root.subkeys() {
             let Some(k) = RegKey::open(*hive, &format!(r"{path}\{sub}")) else { continue };
-            let Some(name) = k.string("DisplayName") else { continue };
-            let patch = k.string("ParentKeyName").is_some() || k.string("ReleaseType").is_some_and(|t| t.to_lowercase().contains("update") || t.eq_ignore_ascii_case("hotfix"));
-            if k.dword("SystemComponent") == Some(1) || patch || k.string("UninstallString").is_none() {
-                continue;
-            }
+            let Some(name) = k.string("DisplayName").filter(|_| listed(&k)) else { continue };
             let version = k.string("DisplayVersion");
             if out.iter().any(|r| r.name == name && r.version == version) {
                 continue; // même programme inscrit en 32 et 64 bits
@@ -288,6 +291,7 @@ pub fn list() -> Listing {
                 running: names.iter().any(|x| running.binary_search(x).is_ok()),
                 name: r.name,
                 data: 0,
+                data_paths: vec![],
             }
         })
         .collect();
@@ -311,6 +315,7 @@ pub fn list() -> Listing {
             kind: "store",
             icon: None,
             running: false,
+            data_paths: vec![],
         }
     }).collect();
     apps.extend(store);
@@ -318,7 +323,7 @@ pub fn list() -> Listing {
     Listing { apps, tracking }
 }
 
-const STORE_REMOVE: &str = r#"$p = Get-AppxPackage -PackageTypeFilter Main | Where-Object { $_.PackageFullName -eq $env:KC_PKG -and -not $_.NonRemovable -and -not $_.IsFramework }
+const STORE_REMOVE: &str = r#"$p = Get-AppxPackage -PackageTypeFilter Main | Where-Object { $_.PackageFullName -eq $env:KC_PKG -and -not $_.NonRemovable -and -not $_.IsFramework -and $_.SignatureKind -eq 'Store' }
 if (-not $p) { throw 'appli introuvable' }
 Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop
 'ok'"#;
@@ -338,7 +343,7 @@ pub fn uninstall(id: &str) -> Result<Value, String> {
     if sub.is_empty() || sub.contains('\\') {
         return Err("identifiant invalide".into());
     }
-    let k = RegKey::open(hive, &format!(r"{path}\{sub}")).ok_or("ce programme n'est plus installé")?;
+    let k = RegKey::open(hive, &format!(r"{path}\{sub}")).filter(listed).ok_or("ce programme n'est plus installé")?;
     let cmd = k.string("UninstallString").ok_or("ce programme n'a pas de désinstalleur")?;
     let (file, params) = os::split_command(&cmd).ok_or("désinstalleur illisible")?;
     os::launch(&file, &params)?;

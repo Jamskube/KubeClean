@@ -261,17 +261,21 @@ pub fn reg_value_text(data: &[u8]) -> String {
 }
 
 /// « "C:\x\unins000.exe" /SILENT » -> (fichier, paramètres). Une ligne sans guillemets se coupe
-/// après le premier « .exe ». MsiExec /I (modifier) devient /X (désinstaller).
+/// après le premier « .exe » suivi d'une espace ou de la fin. %VAR% du fichier développées.
+/// MsiExec est celui de System32 (jamais un homonyme du dossier courant) ; /I (modifier) devient /X.
 pub fn split_command(cmd: &str) -> Option<(String, String)> {
     let c = cmd.trim();
     let (file, params) = if let Some(rest) = c.strip_prefix('"') {
         let end = rest.find('"')?;
         (rest[..end].to_string(), rest[end + 1..].trim().to_string())
     } else {
-        let i = c.to_ascii_lowercase().find(".exe")? + 4;
+        let low = c.to_ascii_lowercase();
+        let i = low.match_indices(".exe").map(|(i, _)| i + 4).find(|&i| low[i..].is_empty() || low[i..].starts_with(' '))?;
         (c.get(..i)?.to_string(), c.get(i..)?.trim().to_string())
     };
-    let msi = file.to_ascii_lowercase().ends_with("msiexec.exe") || file.eq_ignore_ascii_case("msiexec");
+    let file = if file.contains('%') { crate::fsutil::expand_env(&file)?.to_string_lossy().into_owned() } else { file };
+    let msi = Path::new(&file).file_name().is_some_and(|n| n.eq_ignore_ascii_case("msiexec.exe") || n.eq_ignore_ascii_case("msiexec"));
+    let file = if msi { system32("msiexec.exe").to_string_lossy().into_owned() } else { file };
     let params = match params.get(..2) {
         Some(p) if msi && p.eq_ignore_ascii_case("/i") => format!("/X{}", &params[2..]),
         _ => params,
@@ -361,8 +365,12 @@ mod tests {
         let s = |c: &str| split_command(c).map(|(f, p)| (f, p));
         assert_eq!(s(r#""C:\Program Files\X\unins000.exe" /SILENT"#), Some((r"C:\Program Files\X\unins000.exe".into(), "/SILENT".into())));
         assert_eq!(s(r"C:\Program Files\Y App\uninstall.exe --remove"), Some((r"C:\Program Files\Y App\uninstall.exe".into(), "--remove".into())));
-        assert_eq!(s("MsiExec.exe /I{1234-ABCD}"), Some(("MsiExec.exe".into(), "/X{1234-ABCD}".into())));
-        assert_eq!(s("MsiExec.exe /X{1234-ABCD}"), Some(("MsiExec.exe".into(), "/X{1234-ABCD}".into())));
+        let msi = system32("msiexec.exe").to_string_lossy().into_owned();
+        assert_eq!(s("MsiExec.exe /I{1234-ABCD}"), Some((msi.clone(), "/X{1234-ABCD}".into())));
+        assert_eq!(s("MsiExec.exe /X{1234-ABCD}"), Some((msi.clone(), "/X{1234-ABCD}".into())));
+        assert_eq!(s(r"C:\Tools\my.exec\uninst.exe /S"), Some((r"C:\Tools\my.exec\uninst.exe".into(), "/S".into())));
+        let sysroot = std::env::var("SystemRoot").unwrap();
+        assert_eq!(s(r"%SystemRoot%\x\u.exe /q").map(|x| x.0), Some(format!(r"{sysroot}\x\u.exe")));
         assert_eq!(s(r#""C:\a.exe""#), Some((r"C:\a.exe".into(), "".into())));
         assert_eq!(s("rundll32 something"), None);
     }

@@ -103,9 +103,23 @@ fn bundles() -> Vec<PathBuf> {
     out
 }
 
-/// Données d'une appli dans ~/Library, désignées par son identifiant ou son nom exact.
-fn app_data(bundle: &str, name: &str) -> Vec<PathBuf> {
+/// Identifiant d'appli à au moins `parts` segments, sans rien qu'un chemin ou une requête Spotlight
+/// interprète : jamais vide (`join("")` désignerait le dossier parent lui-même).
+fn id_ok(id: &str, parts: usize) -> bool {
+    let p: Vec<&str> = id.split('.').collect();
+    p.len() >= parts
+        && p.iter().all(|x| !x.is_empty())
+        && id.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || ".-_".contains(c))
+}
+
+/// Données d'une appli dans ~/Library, désignées par son seul identifiant : un nom (« Firefox »,
+/// « Steam ») est partagé par plusieurs éditions ou porte des jeux entiers.
+fn app_data(bundle: &str) -> Vec<PathBuf> {
     let Some(lib) = home().map(|h| h.join("Library")) else { return vec![] };
+    if !id_ok(bundle, 2) {
+        return vec![];
+    }
     let mut v = vec![
         lib.join("Application Support").join(bundle),
         lib.join("Caches").join(bundle),
@@ -119,9 +133,8 @@ fn app_data(bundle: &str, name: &str) -> Vec<PathBuf> {
         lib.join("Application Scripts").join(bundle),
         lib.join("Logs").join(bundle),
     ];
-    if name.chars().count() >= 3 && !name.contains('/') && !name.starts_with('.') {
-        v.extend([lib.join("Application Support").join(name), lib.join("Caches").join(name), lib.join("Logs").join(name)]);
-    }
+    // chaque chemin est exactement Library/<dossier>/<élément>
+    v.retain(|p| p.parent().and_then(Path::parent) == Some(lib.as_path()) && p.file_name().is_some_and(|n| !n.is_empty()));
     v.retain(|p| std::fs::symlink_metadata(p).is_ok_and(|m| !fsutil::is_reparse(&m)) && fsutil::path_without_reparse(p));
     v.sort();
     v.dedup();
@@ -173,14 +186,14 @@ fn scan() -> Vec<Found> {
         .filter_map(|p| {
             let info = plist(&p.join("Contents/Info.plist"), &["CFBundleIdentifier", "CFBundleName", "CFBundleDisplayName", "CFBundleShortVersionString", "CFBundleExecutable"]);
             let bundle = info.get("CFBundleIdentifier")?.clone();
-            if bundle.starts_with("com.apple.") || bundle.contains('/') || bundle.starts_with('.') {
-                return None; // applis du système : protégées, hors sujet
+            if bundle.starts_with("com.apple.") || !id_ok(&bundle, 2) {
+                return None; // applis du système (protégées) ou identifiant inutilisable
             }
             let file_name = p.file_stem()?.to_string_lossy().into_owned();
             let name = info.get("CFBundleDisplayName").or(info.get("CFBundleName")).cloned().unwrap_or_else(|| file_name.clone());
             let exec = info.get("CFBundleExecutable").cloned().unwrap_or(file_name.clone()).to_lowercase();
             let (last_used, added, size) = spotlight(&p);
-            let left = app_data(&bundle, &file_name);
+            let left = app_data(&bundle);
             let (crashes, hangs) = reports.get(&exec).copied().unwrap_or_default();
             let app = App {
                 id: p.to_string_lossy().into_owned(),
@@ -197,6 +210,7 @@ fn scan() -> Vec<Found> {
                 kind: "mac",
                 icon: Some(p.to_string_lossy().into_owned()),
                 running: running.binary_search(&exec).is_ok(),
+                data_paths: left.iter().map(|l| l.to_string_lossy().into_owned()).collect(),
             };
             Some(Found { app, exec, leftovers: left })
         })
@@ -227,12 +241,13 @@ fn trash(paths: Vec<PathBuf>) -> Value {
 
 pub fn uninstall(id: &str) -> Result<Value, String> {
     let f = find(id)?;
-    let mut paths = vec![PathBuf::from(&f.app.id)];
-    paths.extend(f.leftovers);
-    let r = trash(paths);
+    // l'appli d'abord, seule : refusée (installée par un .pkg, propriété de root), ses données restent
+    os::recycle(&[PathBuf::from(&f.app.id)]);
     if Path::new(&f.app.id).exists() {
-        return Err("macOS a refusé de déplacer l'appli (installée par l'administrateur ?) : glisse-la dans la Corbeille depuis le Finder".into());
+        return Err("macOS a refusé de déplacer l'appli (installée par l'administrateur ?) : glisse-la dans la Corbeille depuis le Finder. Ses données n'ont pas été touchées.".into());
     }
+    let mut r = trash(f.leftovers);
+    r["removed"] = json!(r["removed"].as_u64().unwrap_or(0) + 1);
     Ok(r)
 }
 
@@ -249,17 +264,19 @@ pub fn reset(id: &str) -> Result<Value, String> {
 
 /// « com.editeur.appli » : identifiant d'appli plausible, sans rien qu'une requête Spotlight interprète.
 fn bundle_like(id: &str) -> bool {
-    let parts: Vec<&str> = id.split('.').collect();
-    parts.len() >= 3
-        && parts.iter().all(|p| !p.is_empty())
-        && id.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || ".-_".contains(c))
+    id_ok(id, 3)
+}
+
+/// « com.editeur » : deux premiers segments. Une extension ou un assistant porte souvent un
+/// identifiant qui ne prolonge pas celui de son appli, mais garde l'éditeur.
+fn vendor(id: &str) -> String {
+    id.split('.').take(2).collect::<Vec<_>>().join(".")
 }
 
 /// Spotlight connaît-il une appli portant cet identifiant, n'importe où sur le Mac ?
 fn bundle_known(id: &str) -> bool {
     Command::new("/usr/bin/mdfind")
-        .arg(format!("kMDItemCFBundleIdentifier == '{id}'"))
+        .arg(format!("kMDItemCFBundleIdentifier == '{id}'c")) // c : sans tenir compte de la casse
         .output()
         .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
         .unwrap_or(true) // dans le doute, l'appli existe
@@ -271,6 +288,7 @@ fn orphans() -> Result<Vec<(String, Vec<PathBuf>)>, String> {
     let installed: Vec<String> = bundles()
         .into_par_iter()
         .filter_map(|p| plist(&p.join("Contents/Info.plist"), &["CFBundleIdentifier"]).remove("CFBundleIdentifier"))
+        .filter(|s| id_ok(s, 2))
         .map(|s| s.to_lowercase())
         .collect();
     // Spotlight coupé ou incomplet : sans lui, toute donnée paraîtrait orpheline
@@ -284,11 +302,11 @@ fn orphans() -> Result<Vec<(String, Vec<PathBuf>)>, String> {
             let name = e.file_name().to_string_lossy().into_owned();
             let Some(id) = (if suffix.is_empty() { Some(name.as_str()) } else { name.strip_suffix(suffix) }) else { continue };
             let low = id.to_lowercase();
-            let mine = installed.iter().any(|i| low == *i || low.starts_with(&format!("{i}.")));
+            let mine = installed.iter().any(|i| low == *i || low.starts_with(&format!("{i}.")) || vendor(&low) == vendor(i));
             if !bundle_like(id) || low.starts_with("com.apple.") || mine {
                 continue;
             }
-            if std::fs::symlink_metadata(e.path()).is_ok_and(|m| !fsutil::is_reparse(&m)) {
+            if std::fs::symlink_metadata(e.path()).is_ok_and(|m| !fsutil::is_reparse(&m)) && fsutil::path_without_reparse(&e.path()) {
                 by_id.entry(id.to_string()).or_default().push(e.path());
             }
         }
@@ -428,6 +446,11 @@ mod tests {
         assert!(!bundle_like("com.x"));
         assert!(!bundle_like("com.x.y' || true"));
         assert!(!bundle_like(".hidden.thing.x"));
+        assert!(!id_ok("", 2), "un identifiant vide désignerait le dossier Library/<x> entier");
+        assert!(!id_ok("..", 2));
+        assert!(app_data("").is_empty());
+        assert!(id_ok("org.mozilla.firefox", 2));
+        assert_eq!(vendor("com.vendor.safari"), vendor("com.vendor.app"));
     }
     #[test]
     fn real_listing_reads_only() {

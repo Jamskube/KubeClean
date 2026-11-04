@@ -77,6 +77,7 @@ function call(method, params) {
 const fromApp = (e) => e.senderFrame?.url.startsWith(ORIGIN + '/');
 const isAbs = (p) => typeof p === 'string' && path.isAbsolute(p) && !p.split(/[\\/]/).includes('..');
 
+const READ_ONLY = new Set(['hello', 'drives', 'cancel', 'scan', 'items', 'settings.get', 'history', 'apps', 'startup', 'updates', 'space', 'apps.leftovers']);
 ipcMain.handle('core', (e, method, params) => {
   if (!fromApp(e) || !METHODS.has(method)) return { error: 'appel refusé' };
   // a folder read can block in the kernel (macOS waits on its permission prompt) and never see the
@@ -84,8 +85,9 @@ ipcMain.handle('core', (e, method, params) => {
   if (method === 'cancel') {
     const scans = [...methods].filter(([, m]) => m === 'scan' || m === 'space').map(([id]) => id); // only the read-only walks running now
     setTimeout(() => {
-      const running = [...methods.values()];
-      if (core && scans.some((id) => methods.has(id)) && !running.includes('clean')) { stopping = true; core.kill('SIGKILL'); }
+      // tuer le moteur seulement si TOUT ce qui tourne est une lecture : une désinstallation, une mise
+      // à jour ou un envoi à la Corbeille coupés en route laisseraient un état à moitié fait
+      if (core && scans.some((id) => methods.has(id)) && [...methods.values()].every((m) => READ_ONLY.has(m))) { stopping = true; core.kill('SIGKILL'); }
     }, 3000);
   }
   return call(method, params);
@@ -98,7 +100,8 @@ const APP_VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.js
 ipcMain.handle('app-version', () => APP_VERSION);
 // icône d'une appli (exe, .app, raccourci) : lue par le système, jamais par la page
 ipcMain.handle('file-icon', async (e, p) => {
-  if (!fromApp(e) || !isAbs(p) || !fs.existsSync(p)) return null;
+  // jamais un chemin réseau (\\serveur\...) : le lire enverrait l'identité Windows à ce serveur
+  if (!fromApp(e) || !isAbs(p) || /^[\\/]{2}/.test(p) || !fs.existsSync(p)) return null;
   try { return (await app.getFileIcon(p, { size: 'normal' })).toDataURL(); } catch { return null; }
 });
 // réglages du système pour ce que le moteur ne peut pas lister (éléments d'ouverture modernes)

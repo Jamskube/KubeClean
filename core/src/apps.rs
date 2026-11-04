@@ -35,6 +35,9 @@ pub struct App {
     pub running: bool,
     /// Pilote, environnement d'exécution… : listé, jamais proposé comme inutilisé.
     pub system: bool,
+    /// Mac : chemins des données, montrés avant de les envoyer à la Corbeille.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub data_paths: Vec<String>,
 }
 
 #[derive(Serialize)]

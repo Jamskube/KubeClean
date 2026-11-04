@@ -177,6 +177,14 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             let progress = |done: usize, total: usize, label: &str| c.event("progress", json!({ "phase": "space", "done": done, "total": total, "label": label }));
             space::list(&path, p.refresh, &c.cancel, &progress).map(|l| json!(l))
         }
+        "apps.leftovers" => apps::leftovers(),
+        "apps.trashLeftovers" => {
+            #[derive(Deserialize)]
+            struct P { ids: Vec<String> }
+            let p: P = serde_json::from_value(params).map_err(|e| e.to_string())?;
+            let _b = take_busy(c)?;
+            apps::trash_leftovers(&p.ids)
+        }
         "startup.set" => {
             #[derive(Deserialize)]
             struct P { id: String, enabled: bool }

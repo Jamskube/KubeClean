@@ -26,6 +26,9 @@ class Apps {
   updates = $state.raw(null);
   updatesError = $state('');
   updatesLoading = $state(false);
+  leftovers = $state.raw(null); // Mac : [{ id, size, paths }]
+  leftoversError = $state('');
+  picked = $state({}); // id -> true, jamais rempli d'office
   working = $state({}); // id -> libellé de l'action en cours
   icons = $state({}); // chemin -> data URL | null
   /** un désinstalleur Windows tourne hors de nous : relire la liste quand la fenêtre revient */
@@ -84,6 +87,24 @@ class Apps {
     this.updatesLoading = true;
     this.updatesError = '';
     try { this.updates = await kc.call('updates'); } catch (e) { this.updates = []; this.updatesError = e.message; } finally { this.updatesLoading = false; }
+  }
+
+  async loadLeftovers(force = false) {
+    if (this.leftovers && !force) return;
+    this.leftoversError = '';
+    this.picked = {};
+    try { this.leftovers = await kc.call('apps.leftovers'); } catch (e) { this.leftovers = []; this.leftoversError = e.message; }
+  }
+  async trashLeftovers() {
+    const ids = Object.keys(this.picked);
+    try {
+      const r = await this.run('leftovers', 'Envoi à la Corbeille…', () => kc.call('apps.trashLeftovers', { ids }));
+      this.leftovers = this.leftovers.filter((g) => !ids.includes(g.id));
+      this.picked = {};
+      toast({ title: 'Restes envoyés à la Corbeille', description: r.left?.length ? `${r.left.length} élément(s) refusé(s) par macOS, laissés en place.` : '« Remettre » dans le Finder les restaure tant que tu ne la vides pas.', tone: 'success' });
+    } catch (e) {
+      toast({ title: 'Rien n’a été déplacé', description: e.message, tone: 'danger' });
+    }
   }
 
   async run(id, label, fn) {

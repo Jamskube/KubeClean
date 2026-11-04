@@ -198,6 +198,12 @@ function spaceList(p) {
   return { path: p, size: entries.reduce((n, e) => n + e.size, 0), files: entries.reduce((a, e) => a + e.files, 0), entries: shown, rest: tail.reduce((a, e) => a + e.size, 0), restCount: tail.length };
 }
 
+const LIB = '/Users/nico/Library';
+let LEFTOVERS = [
+  { id: 'com.skype.skype', size: 1.9e9, paths: [LIB + '/Application Support/com.skype.skype', LIB + '/Caches/com.skype.skype', LIB + '/Preferences/com.skype.skype.plist'] },
+  { id: 'com.tinyspeck.slackmacgap', size: 840e6, paths: [LIB + '/Containers/com.tinyspeck.slackmacgap'] },
+  { id: 'org.videolan.vlc', size: 12e6, paths: [LIB + '/Preferences/org.videolan.vlc.plist', LIB + '/Saved Application State/org.videolan.vlc.savedState'] },
+];
 const appMethods = {
   async space({ path: p }) {
     if (!p) return { roots: MAC_MOCK ? [{ label: 'Dossier personnel', path: SPACE_HOME }, { label: 'Applications', path: '/Applications' }] : [{ label: 'Dossier personnel', path: SPACE_HOME }, { label: 'C:', path: 'C:\\' }, { label: 'G:', path: 'G:\\' }] };
@@ -214,6 +220,18 @@ const appMethods = {
       spaceKnown.set(p + '#vu', 1);
       return l;
     } finally { busy = false; }
+  },
+  async 'apps.leftovers'() {
+    if (!MAC_MOCK) throw new Error('disponible sur macOS seulement');
+    await scaled(1200);
+    return LEFTOVERS;
+  },
+  async 'apps.trashLeftovers'({ ids }) {
+    const gone = LEFTOVERS.filter((g) => ids.includes(g.id));
+    if (!gone.length) throw new Error('rien à envoyer à la Corbeille : actualise la liste');
+    await scaled(600);
+    LEFTOVERS = LEFTOVERS.filter((g) => !ids.includes(g.id)); // factice : rien n'est déplacé
+    return { removed: gone.reduce((n, g) => n + g.paths.length, 0), left: [] };
   },
   apps: async () => { await scaled(900); return { apps: APPS, tracking: true }; },
   startup: async () => { await scaled(150); return STARTUP; },

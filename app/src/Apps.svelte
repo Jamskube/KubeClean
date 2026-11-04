@@ -16,8 +16,14 @@
     { id: 'unstable', label: 'Plantages', icon: 'triangle-alert', hint: 'Applis qui ont planté ou cessé de répondre ces 30 derniers jours' },
     { id: 'all', label: 'Toutes', icon: 'layout-grid', hint: 'Toutes les applications installées' },
     { id: 'startup', label: 'Démarrage', icon: 'power', hint: MAC ? 'Agents lancés à l’ouverture de ta session' : 'Programmes lancés à l’ouverture de ta session' },
-    ...(MAC ? [] : [{ id: 'updates', label: 'Mises à jour', icon: 'circle-arrow-up', hint: 'Nouvelles versions disponibles via winget' }]),
+    ...(MAC
+      ? [{ id: 'leftovers', label: 'Restes', icon: 'trash', hint: 'Données laissées dans ta Bibliothèque par des applis déjà supprimées' }]
+      : [{ id: 'updates', label: 'Mises à jour', icon: 'circle-arrow-up', hint: 'Nouvelles versions disponibles via winget' }]),
   ];
+  const pickedIds = $derived(Object.keys(A.picked));
+  const pickedSize = $derived((A.leftovers ?? []).filter((g) => A.picked[g.id]).reduce((n, g) => n + g.size, 0));
+  const togglePick = (id) => { const { [id]: on, ...rest } = A.picked; A.picked = on ? rest : { ...rest, [id]: true }; };
+  const tail = (p) => p.split('/').slice(-2).join('/');
   let tab = $state('unused');
   let sort = $state('size'); // size | used | name
   let q = $state('');
@@ -25,7 +31,7 @@
   let dlg = $state();
 
   A.load();
-  $effect(() => { if (tab === 'startup') A.loadStartup(); if (tab === 'updates') A.loadUpdates(); });
+  $effect(() => { if (tab === 'startup') A.loadStartup(); if (tab === 'updates') A.loadUpdates(); if (tab === 'leftovers') A.loadLeftovers(); });
   $effect(() => { if (ask && dlg && !dlg.open) dlg.showModal(); });
 
   const total = (a) => a.size + (MAC ? a.data : 0);
@@ -40,7 +46,7 @@
     }
     return list;
   });
-  const count = (id) => (id === 'unused' ? A.unused.length : id === 'unstable' ? A.unstable.length : id === 'all' ? (A.list?.length ?? 0) : id === 'startup' ? (A.startup?.filter((s) => s.enabled).length ?? null) : (A.updates?.length ?? null));
+  const count = (id) => (id === 'unused' ? A.unused.length : id === 'unstable' ? A.unstable.length : id === 'all' ? (A.list?.length ?? 0) : id === 'startup' ? (A.startup?.filter((s) => s.enabled).length ?? null) : id === 'leftovers' ? (A.leftovers?.length ?? null) : (A.updates?.length ?? null));
   const unusedSize = $derived(A.unused.reduce((n, a) => n + total(a), 0));
 
   function seen(a) {
@@ -55,7 +61,9 @@
   }
   const short = (cmd) => cmd.replace(/^"([^"]+)".*$/, '$1');
 
+  const ASK = { uninstall: { title: 'Désinstaller', icon: 'package-x' }, reset: { title: 'Réinitialiser', icon: 'rotate-ccw' }, leftovers: { title: 'Envoyer à la Corbeille', icon: 'trash' } };
   function confirmText(k, a) {
+    if (k === 'leftovers') return `${plural(pickedIds.length, 'reste', 'restes')} (${fmt(pickedSize)}) partent à la Corbeille. « Remettre » dans le Finder les restaure tant que tu ne la vides pas.`;
     if (k === 'reset') return `Les réglages et données de ${a.name} (${fmt(a.data)}) partent à la Corbeille. L’appli reste installée et repart comme au premier lancement.`;
     if (MAC) return `${a.name} et ses données (${fmt(a.size + a.data)} au total) partent à la Corbeille. « Remettre » dans le Finder les restaure tant que tu ne la vides pas.`;
     if (a.kind === 'store') return `${a.name} sera supprimée avec ses données. Tu pourras la réinstaller depuis le Microsoft Store.`;
@@ -64,7 +72,8 @@
   async function go() {
     const { kind, app } = ask;
     dlg.close();
-    if (kind === 'reset') await A.reset(app);
+    if (kind === 'leftovers') await A.trashLeftovers();
+    else if (kind === 'reset') await A.reset(app);
     else await A.uninstall(app);
   }
 </script>
@@ -123,6 +132,36 @@
         </ul>
       {/if}
       <div class="kc-more"><button class="k-btn k-btn--sm" type="button" onclick={() => kc.openStartupSettings()}><Icon name="settings" />{MAC ? 'Ouvrir « Ouverture » dans Réglages Système' : 'Ouvrir les applis de démarrage de Windows'}</button></div>
+
+    {:else if tab === 'leftovers'}
+      <p class="kc-note">Dossiers et réglages de ta Bibliothèque dont l’appli n’existe plus nulle part sur ce Mac, d’après Spotlight. Rien n’est coché d’office ; ce que tu choisis part à la Corbeille.</p>
+      {#if !A.leftovers}
+        {@render skeleton(4)}
+      {:else if A.leftoversError}
+        {@render empty('circle-alert', 'Recherche impossible', A.leftoversError)}
+      {:else if !A.leftovers.length}
+        {@render empty('circle-check', 'Aucun reste', 'Les données de ta Bibliothèque appartiennent toutes à des applis encore présentes.')}
+      {:else}
+        <ul class="kc-rows" aria-label="Restes d’applis supprimées">
+          {#each A.leftovers as g, i (g.id)}
+            <li class="kc-row" in:fly={{ y: 6, duration: dur, delay: Math.min(i, 8) * 25 }}>
+              <input type="checkbox" class="k-checkbox" aria-label={g.id} checked={!!A.picked[g.id]} disabled={!!A.working.leftovers} onchange={() => togglePick(g.id)} />
+              <div class="kc-row__text">
+                <span class="kc-row__name" title={g.id}>{g.id}</span>
+                <span class="kc-row__sub"><span class="kc-row__cmd" title={g.paths.join('\n')}>{g.paths.map(tail).join(' · ')}</span></span>
+              </div>
+              <span class="kc-row__meta">
+                <span class="k-reveal__item kc-row__actions"><button class="k-btn k-btn--ghost k-btn--icon k-btn--xs" type="button" aria-label="Afficher dans le Finder" onclick={() => kc.reveal(g.paths[0])}><Icon name="folder-open" /></button></span>
+                <span class="kc-row__size kc-num">{fmt(g.size)}</span>
+              </span>
+            </li>
+          {/each}
+        </ul>
+        <div class="k-glass kc-footer" class:kc-footer--empty={!pickedIds.length}>
+          <span class="kc-footer__text">{#if A.working.leftovers}{A.working.leftovers}{:else if pickedIds.length}{plural(pickedIds.length, 'reste coché', 'restes cochés')} · {fmt(pickedSize)}{:else}Rien de coché. Coche ce que tu veux envoyer à la Corbeille.{/if}</span>
+          <button class="k-btn k-btn--primary k-btn--sm" type="button" disabled={!pickedIds.length || !!A.working.leftovers} onclick={() => (ask = { kind: 'leftovers', app: { name: 'les restes' } })}><Icon name="trash" />Envoyer à la Corbeille</button>
+        </div>
+      {/if}
 
     {:else if tab === 'updates'}
       {#if A.updatesLoading && !A.updates}
@@ -213,16 +252,16 @@
   <dialog class="k-dialog k-dialog--form kc-ask" bind:this={dlg} data-kube="dialog" aria-labelledby="ask-title" onclose={() => (ask = null)}>
     <form method="dialog" class="k-dialog__body" onsubmit={(e) => e.preventDefault()}>
       <div class="k-dialog__header">
-        <span class="k-dialog__icon"><Icon name={ask.kind === 'reset' ? 'rotate-ccw' : 'package-x'} /></span>
+        <span class="k-dialog__icon"><Icon name={ASK[ask.kind].icon} /></span>
         <div class="k-dialog__heading">
-          <h2 class="k-dialog__title" id="ask-title">{ask.kind === 'reset' ? 'Réinitialiser' : 'Désinstaller'} {ask.app.name}&nbsp;?</h2>
+          <h2 class="k-dialog__title" id="ask-title">{ask.kind === 'leftovers' ? `Envoyer ${plural(pickedIds.length, 'reste', 'restes')} à la Corbeille` : `${ASK[ask.kind].title} ${ask.app.name}`}&nbsp;?</h2>
           <p class="k-dialog__description">{confirmText(ask.kind, ask.app)}</p>
         </div>
       </div>
       <div class="k-dialog__actions">
         <!-- svelte-ignore a11y_autofocus (action destructive : le focus démarre sur Annuler) -->
         <button class="k-btn" type="button" autofocus onclick={() => dlg.close()}>Annuler</button>
-        <button class="k-btn k-btn--primary" type="button" data-action="confirm-app" onclick={go}><Icon name={ask.kind === 'reset' ? 'rotate-ccw' : 'package-x'} />{ask.kind === 'reset' ? 'Réinitialiser' : MAC || ask.app.kind === 'store' ? 'Désinstaller' : 'Ouvrir le désinstalleur'}</button>
+        <button class="k-btn k-btn--primary" type="button" data-action="confirm-app" onclick={go}><Icon name={ASK[ask.kind].icon} />{ask.kind === 'uninstall' && !MAC && ask.app.kind !== 'store' ? 'Ouvrir le désinstalleur' : ASK[ask.kind].title}</button>
       </div>
     </form>
   </dialog>
@@ -292,4 +331,7 @@
   .kc-skel-icon { width: 32px; height: 32px; border-radius: var(--radius-md); flex: none; }
   .kc-skel { flex: 1; }
   .kc-ask { width: min(30rem, 92vw); }
+  .kc-footer { position: sticky; bottom: var(--space-2); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: auto; padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); box-shadow: var(--shadow-lg); }
+  .kc-footer__text { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .kc-footer--empty .kc-footer__text { color: var(--ink-secondary); }
 </style>

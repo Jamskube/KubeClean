@@ -18,7 +18,7 @@ const CORE = app.isPackaged
   ? path.join(process.resourcesPath, CORE_NAME)
   : path.join(here, '..', '..', 'core', 'target', 'release', CORE_NAME);
 const ORIGIN = 'app://kubeclean';
-const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history', 'apps', 'apps.uninstall', 'apps.reset', 'startup', 'startup.set', 'updates', 'updates.install', 'space']);
+const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history', 'apps', 'apps.uninstall', 'apps.reset', 'startup', 'startup.set', 'updates', 'updates.install', 'space', 'apps.leftovers', 'apps.trashLeftovers']);
 
 if (!app.requestSingleInstanceLock()) app.quit(); // two engines cleaning the same disk: never
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);

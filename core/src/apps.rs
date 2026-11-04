@@ -6,7 +6,7 @@ use serde::Serialize;
 #[cfg_attr(windows, path = "apps/win.rs")]
 #[cfg_attr(target_os = "macos", path = "apps/mac.rs")]
 mod sys;
-pub use sys::{list, set_startup, startup, uninstall, updates, upgrade};
+pub use sys::{leftovers, list, set_startup, startup, trash_leftovers, uninstall, updates, upgrade};
 #[cfg(target_os = "macos")]
 pub use sys::reset;
 

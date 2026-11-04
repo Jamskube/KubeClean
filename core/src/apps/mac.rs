@@ -104,7 +104,7 @@ fn bundles() -> Vec<PathBuf> {
 }
 
 /// Données d'une appli dans ~/Library, désignées par son identifiant ou son nom exact.
-fn leftovers(bundle: &str, name: &str) -> Vec<PathBuf> {
+fn app_data(bundle: &str, name: &str) -> Vec<PathBuf> {
     let Some(lib) = home().map(|h| h.join("Library")) else { return vec![] };
     let mut v = vec![
         lib.join("Application Support").join(bundle),
@@ -180,7 +180,7 @@ fn scan() -> Vec<Found> {
             let name = info.get("CFBundleDisplayName").or(info.get("CFBundleName")).cloned().unwrap_or_else(|| file_name.clone());
             let exec = info.get("CFBundleExecutable").cloned().unwrap_or(file_name.clone()).to_lowercase();
             let (last_used, added, size) = spotlight(&p);
-            let left = leftovers(&bundle, &file_name);
+            let left = app_data(&bundle, &file_name);
             let (crashes, hangs) = reports.get(&exec).copied().unwrap_or_default();
             let app = App {
                 id: p.to_string_lossy().into_owned(),
@@ -243,6 +243,80 @@ pub fn reset(id: &str) -> Result<Value, String> {
         return Err("aucune donnée à réinitialiser".into());
     }
     Ok(trash(f.leftovers))
+}
+
+// ---------- restes d'applis supprimées ----------
+
+/// « com.editeur.appli » : identifiant d'appli plausible, sans rien qu'une requête Spotlight interprète.
+fn bundle_like(id: &str) -> bool {
+    let parts: Vec<&str> = id.split('.').collect();
+    parts.len() >= 3
+        && parts.iter().all(|p| !p.is_empty())
+        && id.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || ".-_".contains(c))
+}
+
+/// Spotlight connaît-il une appli portant cet identifiant, n'importe où sur le Mac ?
+fn bundle_known(id: &str) -> bool {
+    Command::new("/usr/bin/mdfind")
+        .arg(format!("kMDItemCFBundleIdentifier == '{id}'"))
+        .output()
+        .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+        .unwrap_or(true) // dans le doute, l'appli existe
+}
+
+/// Données de ~/Library dont l'appli n'existe plus nulle part : (identifiant, chemins).
+fn orphans() -> Result<Vec<(String, Vec<PathBuf>)>, String> {
+    let lib = home().ok_or("dossier personnel introuvable")?.join("Library");
+    let installed: Vec<String> = bundles()
+        .into_par_iter()
+        .filter_map(|p| plist(&p.join("Contents/Info.plist"), &["CFBundleIdentifier"]).remove("CFBundleIdentifier"))
+        .map(|s| s.to_lowercase())
+        .collect();
+    // Spotlight coupé ou incomplet : sans lui, toute donnée paraîtrait orpheline
+    if !installed.iter().take(3).any(|id| bundle_known(id)) {
+        return Err("Spotlight ne répond pas : impossible de savoir quelles applis existent encore".into());
+    }
+    let mut by_id: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    for (dir, suffix) in [("Containers", ""), ("Application Support", ""), ("Caches", ""), ("HTTPStorages", ""), ("WebKit", ""), ("Saved Application State", ".savedState"), ("Preferences", ".plist")] {
+        let Ok(rd) = std::fs::read_dir(lib.join(dir)) else { continue };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let Some(id) = (if suffix.is_empty() { Some(name.as_str()) } else { name.strip_suffix(suffix) }) else { continue };
+            let low = id.to_lowercase();
+            let mine = installed.iter().any(|i| low == *i || low.starts_with(&format!("{i}.")));
+            if !bundle_like(id) || low.starts_with("com.apple.") || mine {
+                continue;
+            }
+            if std::fs::symlink_metadata(e.path()).is_ok_and(|m| !fsutil::is_reparse(&m)) {
+                by_id.entry(id.to_string()).or_default().push(e.path());
+            }
+        }
+    }
+    let mut out: Vec<(String, Vec<PathBuf>)> = by_id.into_par_iter().filter(|(id, _)| !bundle_known(id)).collect();
+    out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    Ok(out)
+}
+
+pub fn leftovers() -> Result<Value, String> {
+    let cancel = AtomicBool::new(false);
+    let groups: Vec<Value> = orphans()?
+        .into_par_iter()
+        .map(|(id, paths)| {
+            let size: u64 = paths.iter().map(|p| tree_stat(p, &cancel).size).sum();
+            json!({ "id": id, "size": size, "paths": paths })
+        })
+        .collect();
+    Ok(json!(groups))
+}
+
+/// Seuls les identifiants encore orphelins à cet instant partent, avec tous leurs chemins.
+pub fn trash_leftovers(ids: &[String]) -> Result<Value, String> {
+    let paths: Vec<PathBuf> = orphans()?.into_iter().filter(|(id, _)| ids.contains(id)).flat_map(|(_, p)| p).collect();
+    if paths.is_empty() {
+        return Err("rien à envoyer à la Corbeille : actualise la liste".into());
+    }
+    Ok(trash(paths))
 }
 
 // ---------- ouverture de session ----------
@@ -348,6 +422,12 @@ mod tests {
         assert_eq!(report_process("Foo Bar_2026-03-04-050607_host.hang"), Some(("foo bar".into(), true)));
         assert_eq!(report_process("notes.txt"), None);
         assert_eq!(app_of("/Applications/Zoom.app/Contents/MacOS/zoom"), Some("/Applications/Zoom.app".into()));
+        assert!(bundle_like("com.spotify.client"));
+        assert!(bundle_like("us.zoom.xos"));
+        assert!(!bundle_like("Google"), "dossier d'éditeur partagé");
+        assert!(!bundle_like("com.x"));
+        assert!(!bundle_like("com.x.y' || true"));
+        assert!(!bundle_like(".hidden.thing.x"));
     }
     #[test]
     fn real_listing_reads_only() {

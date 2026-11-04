@@ -345,6 +345,14 @@ pub fn uninstall(id: &str) -> Result<Value, String> {
     Ok(json!({ "launched": true }))
 }
 
+/// Restes d'applis supprimées : sous Windows, rien ne relie sûrement un dossier à une appli disparue.
+pub fn leftovers() -> Result<Value, String> {
+    Err("disponible sur macOS seulement".into())
+}
+pub fn trash_leftovers(_ids: &[String]) -> Result<Value, String> {
+    Err("disponible sur macOS seulement".into())
+}
+
 // ---------- ouverture de session ----------
 
 const RUN: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";

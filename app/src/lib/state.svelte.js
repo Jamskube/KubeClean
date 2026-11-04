@@ -17,24 +17,24 @@ export const toast = (o) => window.Kube?.toast?.(o);
 const WIN_CATS = [
   { id: 'system', label: 'Windows', icon: 'monitor', blurb: 'Temporaires, rapports, caches système', series: 1 },
   { id: 'browsers', label: 'Navigateurs', icon: 'globe', blurb: 'Caches de Chrome, Edge, Brave, Firefox', series: 2 },
-  { id: 'apps', label: 'Applications', icon: 'app-window', blurb: 'Teams, VS Code, JetBrains, Spotify…', series: 3 },
+  { id: 'apps', label: 'Applications', icon: 'app-window', blurb: 'Teams, VS Code, WhatsApp, Spotify…', series: 3 },
   { id: 'dev', label: 'Outils de dev', icon: 'code-xml', blurb: 'npm, Cargo, Gradle, pip, Claude…', series: 4 },
   { id: 'projects', label: 'Projets', icon: 'folder-code', blurb: 'node_modules, target, .venv…', series: 5 },
-  { id: 'files', label: 'Fichiers personnels', icon: 'file-archive', blurb: 'Gros fichiers, vieux téléchargements', series: 7 },
+  { id: 'files', label: 'Fichiers personnels', icon: 'file-archive', blurb: 'Gros fichiers, installeurs, vieux téléchargements', series: 7 },
   { id: 'admin', label: 'Système (admin)', icon: 'shield', blurb: 'Tâches Windows avec élévation', series: 6 },
 ];
 // no developer tools, projects or admin tasks on the Mac: its rules (core/rules/macos.json) have none
 const MAC_CATS = [
   { id: 'system', label: 'macOS', icon: 'laptop', blurb: 'Caches, journaux, mises à jour d’iPhone', series: 1 },
   { id: 'browsers', label: 'Navigateurs', icon: 'globe', blurb: 'Caches de Chrome, Edge, Brave, Firefox', series: 2 },
-  { id: 'apps', label: 'Applications', icon: 'app-window', blurb: 'Spotify, Adobe…', series: 3 },
-  { id: 'files', label: 'Fichiers personnels', icon: 'file-archive', blurb: 'Gros fichiers, vieux téléchargements', series: 7 },
+  { id: 'apps', label: 'Applications', icon: 'app-window', blurb: 'Slack, Discord, Spotify, Telegram…', series: 3 },
+  { id: 'files', label: 'Fichiers personnels', icon: 'file-archive', blurb: 'Gros fichiers, installeurs, vieux téléchargements', series: 7 },
 ];
 export const CATS = MAC ? MAC_CATS : WIN_CATS;
 /** CSS color of a category, same in every view */
 export const catColor = (id) => `var(--k-chart-${CATS.find((c) => c.id === id)?.series ?? 1})`;
 /** display names of processes reported in `blockedBy` */
-export const APP_NAMES = { 'google chrome': 'Chrome', 'microsoft edge': 'Edge', 'brave browser': 'Brave', explorer: 'Explorateur', chrome: 'Chrome', msedge: 'Edge', brave: 'Brave', firefox: 'Firefox', 'ms-teams': 'Teams', teams: 'Teams', code: 'VS Code', spotify: 'Spotify', steam: 'Steam', onedrive: 'OneDrive' };
+export const APP_NAMES = { 'google chrome': 'Chrome', 'microsoft edge': 'Edge', 'brave browser': 'Brave', explorer: 'Explorateur', chrome: 'Chrome', msedge: 'Edge', brave: 'Brave', firefox: 'Firefox', 'ms-teams': 'Teams', teams: 'Teams', code: 'VS Code', telegram: 'Telegram', spotify: 'Spotify', steam: 'Steam', onedrive: 'OneDrive' };
 export const appName = (p) => APP_NAMES[p.toLowerCase()] ?? p;
 export const VIEWS = ['dashboard', 'clean', 'projects', 'files', 'history', 'settings', 'result'];
 

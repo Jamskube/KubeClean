@@ -19,6 +19,7 @@ const scaled = (ms) => sleep(Math.max(0, ms * (Number(process.env.KC_MOCK_SPEED)
 const h = (s) => { let x = 2166136261; for (const c of s) x = Math.imul(x ^ c.charCodeAt(0), 16777619); return (x >>> 0) / 4294967296; };
 const MB = 1024 * 1024;
 const sizeFor = (r) => {
+  if (r.kind === 'oldDownloads') return downloadsFor(r).reduce((n, d) => n + d[1], 0);
   const big = { chromeCache: 6500, claudeSessions: 5300, npmCache: 4700, diagTraces: 3600, wslCrashes: 1800, teamsCache: 900, edgeCache: 420, gradleCaches: 1400, cargoCache: 800, vscodeWorkspaces: 160, userTemp: 240, thumbCache: 8, d3dShaders: 26, werReports: 0, inetCache: 0.03, recycleBin: 296, adminWindowsTemp: 120, adminWer: 13, adminDelivery: 0, adminComponents: 0, playwright: 1100, pipUv: 650, nodeCompile: 3 };
   return Math.round((big[r.id] ?? (h(r.id) < 0.45 ? 0 : h(r.id) * 300)) * MB * (WORST && r.id === 'npmCache' ? 90 : 1));
 };
@@ -52,11 +53,14 @@ const DOWNLOADS = [
   ['Downloads\\dataset.csv', 480 * MB, 120], ['Downloads\\Figma Setup 124.6.5.exe', 90 * MB, 101],
 ];
 
+// mask / exclude of the rule, as the engine applies them (installers vs old downloads)
+const exts = (m) => (m ?? '').split(';').filter(Boolean).map((x) => x.replace('*', '').toLowerCase());
+const downloadsFor = (r) => DOWNLOADS.filter(([p]) => { const hit = (m) => exts(m).some((e) => p.toLowerCase().endsWith(e)); return (!r.mask || hit(r.mask)) && !(r.exclude && hit(r.exclude)); });
 const item = (p, size, idleDays, label, isDir, def) => ({ path: `${USER}\\${p}`, size, newest: now - (idleDays ?? 0) * DAY, isDir, label: label ?? null, idleDays: idleDays ?? null, default: def });
 function itemsFor(r, limit = 5) {
   if (r.kind === 'projects') return PROJECTS.map(([p, label, size, idle]) => item(p, size, idle, label, true, idle >= settings.projectIdleDays));
   if (r.kind === 'largeFiles') return LARGE.map(([p, size, idle]) => item(p, size, idle, null, false, false)).sort((a, b) => b.size - a.size);
-  if (r.kind === 'oldDownloads') return DOWNLOADS.map(([p, size, idle]) => item(p, size, idle, null, false, false)).sort((a, b) => b.size - a.size);
+  if (r.kind === 'oldDownloads') return downloadsFor(r).map(([p, size, idle]) => item(p, size, idle, null, false, false)).sort((a, b) => b.size - a.size);
   if (r.kind === 'recycleBin') return [{ path: 'Corbeille', size: sizeFor(r), newest: 0, isDir: true, label: '3', idleDays: null, default: true }];
   const n = countFor(r);
   const total = sizeFor(r);
@@ -67,7 +71,7 @@ function itemsFor(r, limit = 5) {
   }
   return out;
 }
-const countFor = (r) => (sizeFor(r) === 0 ? 0 : r.kind === 'projects' ? PROJECTS.length : r.kind === 'largeFiles' ? LARGE.length : r.kind === 'oldDownloads' ? DOWNLOADS.length : r.kind === 'recycleBin' ? 3 : WORST && r.id === 'thumbCache' ? 1 : Math.max(1, Math.round(h(r.id) * 5800 * (WORST ? 830 : 1))));
+const countFor = (r) => (sizeFor(r) === 0 ? 0 : r.kind === 'projects' ? PROJECTS.length : r.kind === 'largeFiles' ? LARGE.length : r.kind === 'oldDownloads' ? downloadsFor(r).length : r.kind === 'recycleBin' ? 3 : WORST && r.id === 'thumbCache' ? 1 : Math.max(1, Math.round(h(r.id) * 5800 * (WORST ? 830 : 1))));
 const RUNNING = ['chrome.exe', 'explorer.exe', 'msedge.exe'];
 
 // KC_MOCK_DATA=worst: realistic worst case for UI stress tests (break-ui). Deep client paths,

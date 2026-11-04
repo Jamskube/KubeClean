@@ -1,5 +1,5 @@
 <script>
-  // « Fichiers personnels » : gros fichiers et vieux téléchargements, jamais cochés d'office, Corbeille uniquement.
+  // « Fichiers personnels » : gros fichiers, installeurs et vieux téléchargements, jamais cochés d'office, Corbeille uniquement.
   import { fly } from 'svelte/transition';
   import { S, MAC, OS, SEP } from './lib/state.svelte.js';
   import { fmt, plural, idle } from './lib/fmt.js';
@@ -18,7 +18,7 @@
     { id: 'image', label: 'Images', ext: ['jpg', 'jpeg', 'png', 'heic', 'gif', 'webp', 'tif', 'tiff', 'raw', 'dng', 'psd'], kind: 'image', icon: 'file-image' },
     { id: 'disk', label: 'Disques', ext: ['iso', 'img', 'vhd', 'vhdx', 'vmdk', 'qcow2', 'wim'], icon: 'disc' },
     { id: 'data', label: 'Modèles & données', ext: ['bin', 'pmtiles', 'gguf', 'onnx', 'safetensors', 'pt', 'pth', 'ckpt', 'csv', 'parquet', 'sql', 'sql.gz', 'db', 'sqlite', 'json', 'jsonl'], icon: 'database' },
-    { id: 'setup', label: 'Installateurs', ext: ['exe', 'msi', 'msix', 'appx'], icon: 'package' },
+    { id: 'setup', label: 'Installeurs', ext: ['exe', 'msi', 'msix', 'msixbundle', 'appx', 'appxbundle', 'dmg', 'pkg', 'mpkg'], icon: 'package' },
     { id: 'doc', label: 'Documents', ext: ['pdf', 'docx', 'doc', 'pptx', 'ppt', 'xlsx', 'xls', 'txt', 'md', 'odt', 'rtf', 'epub'], kind: 'document', icon: 'file-text' },
     { id: 'other', label: 'Autres', ext: [], icon: 'file' },
   ];
@@ -31,7 +31,8 @@
 
   const TABS = [
     { id: 'largeFiles', label: 'Gros fichiers', empty: 'Aucun gros fichier', icon: 'file-box', hint: () => `Fichiers de plus de ${S.settings?.largeFileMinMb ?? 500} Mo dans ton dossier personnel` },
-    { id: 'oldDownloads', label: 'Téléchargements anciens', empty: 'Aucun vieux téléchargement', icon: 'download', hint: () => `Éléments du dossier Téléchargements plus vieux que ${S.settings?.downloadsOlderThanDays ?? 90} jours` },
+    { id: 'oldDownloads', label: 'Téléchargements anciens', empty: 'Aucun vieux téléchargement', icon: 'download', hint: () => `Éléments du dossier Téléchargements plus vieux que ${S.settings?.downloadsOlderThanDays ?? 90} jours, hors installeurs` },
+    { id: 'installers', label: 'Installeurs', empty: 'Aucun installeur', icon: 'package', fixed: true, hint: () => `Fichiers ${MAC ? '.dmg et .pkg' : '.exe, .msi et .msix'} du dossier Téléchargements, quel que soit leur âge` },
   ];
   let tab = $state('largeFiles');
   let types = $state(new Set());
@@ -39,6 +40,7 @@
   let q = $state('');
   let introOff = $state(read(INTRO_KEY));
 
+  const tabDef = $derived(TABS.find((t) => t.id === tab));
   const rule = $derived(S.rule(tab));
   const items = $derived((rule?.items ?? []).map((it, index) => ({ ...it, index })));
   const counts = $derived.by(() => { const c = {}; for (const it of items) { const t = typeOf(it.path).id; c[t] = (c[t] ?? 0) + 1; } return c; });
@@ -68,7 +70,7 @@
         <h1 class="k-page-header__title">Fichiers personnels</h1>
         <p class="k-page-header__subtitle">Jamais cochés d’office. Ce que tu coches part à la Corbeille, pas en suppression définitive.</p>
         {#if S.scan}
-          <p class="kc-summary"><Num value={ruleCount('largeFiles') + ruleCount('oldDownloads')} kind="int" /> fichiers · <Num value={ruleTotal('largeFiles') + ruleTotal('oldDownloads')} /> trouvés · {#if pickedN}<Num value={pickedSize} /> cochés{:else}rien de coché{/if}</p>
+          <p class="kc-summary"><Num value={TABS.reduce((n, t) => n + ruleCount(t.id), 0)} kind="int" /> fichiers · <Num value={TABS.reduce((n, t) => n + ruleTotal(t.id), 0)} /> trouvés · {#if pickedN}<Num value={pickedSize} /> cochés{:else}rien de coché{/if}</p>
         {/if}
       </div>
     </div>
@@ -90,7 +92,7 @@
         <div class="k-empty__art k-empty__art--tile"><Icon name="file-search" /></div>
         <div class="k-empty__text">
           <h2 class="k-empty__title">{S.busy === 'scan' ? 'Analyse en cours…' : 'Aucune analyse pour l’instant'}</h2>
-          <p class="k-empty__desc">Les gros fichiers de ton dossier personnel et les vieux téléchargements apparaîtront ici.</p>
+          <p class="k-empty__desc">Les gros fichiers de ton dossier personnel, les installeurs et les vieux téléchargements apparaîtront ici.</p>
         </div>
         <div class="k-empty__actions"><button class="k-btn k-btn--primary" type="button" disabled={!!S.busy} onclick={() => S.runScan()}><Icon name="scan-search" />Analyser</button></div>
       </div>
@@ -114,10 +116,10 @@
           <div class="k-empty__body">
             <div class="k-empty__art"><Icon name="circle-check" /></div>
             <div class="k-empty__text">
-              <h2 class="k-empty__title">{TABS.find((t) => t.id === tab)?.empty}</h2>
-              <p class="k-empty__desc">{TABS.find((t) => t.id === tab)?.hint()}. Le seuil se règle dans les Réglages.</p>
+              <h2 class="k-empty__title">{tabDef?.empty}</h2>
+              <p class="k-empty__desc">{tabDef?.hint()}.{#if !tabDef?.fixed} Le seuil se règle dans les Réglages.{/if}</p>
             </div>
-            <div class="k-empty__actions"><button class="k-btn k-btn--sm" type="button" onclick={() => (S.view = 'settings')}><Icon name="settings" />Ouvrir les Réglages</button></div>
+            {#if !tabDef?.fixed}<div class="k-empty__actions"><button class="k-btn k-btn--sm" type="button" onclick={() => (S.view = 'settings')}><Icon name="settings" />Ouvrir les Réglages</button></div>{/if}
           </div>
         </div>
       {:else}

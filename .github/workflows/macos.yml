@@ -5,13 +5,20 @@ name: macOS
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        # quand la file macos-latest sature (« not acquired by Runner »), essayer une autre image Apple Silicon
+        description: Image Mac (Apple Silicon)
+        type: choice
+        options: [macos-latest, macos-15, macos-14]
+        default: macos-latest
   push:
     branches: [main]
     paths: ['core/**', 'app/**', '.github/workflows/macos.yml']
 
 jobs:
   mac:
-    runs-on: macos-latest # arm64
+    runs-on: ${{ inputs.runner || 'macos-latest' }} # arm64
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5

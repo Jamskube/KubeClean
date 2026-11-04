@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('kc', {
     ipcRenderer.on('core-event', (_e, m) => fn(m));
   },
   reveal: (p) => ipcRenderer.invoke('reveal', p),
+  fileIcon: (p) => ipcRenderer.invoke('file-icon', p),
+  openStartupSettings: () => ipcRenderer.invoke('open-startup-settings'),
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   setCleaning: (on) => ipcRenderer.send('cleaning', !!on),
   setTheme: (t) => ipcRenderer.send('theme', String(t)),

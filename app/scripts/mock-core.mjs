@@ -121,6 +121,98 @@ let scans = null;
 let busy = false;
 let cancelled = false;
 
+// applications : [nom, éditeur, version, taille Mo, données Mo, dernière ouverture (jours, null = aucune trace), installée (jours), plantages, blocages, ouverte, composant]
+const MAC_MOCK = process.env.KC_PLATFORM === 'darwin';
+const APPS_SRC = MAC_MOCK ? [
+  ['Google Chrome', null, '131.0', 640, 2100, 0, 400, 0, 0, true],
+  ['Spotify', null, '1.2.50', 310, 4200, 3, 600, 4, 1],
+  ['Zoom', null, '6.2.0', 220, 180, 210, 500],
+  ['Adobe Acrobat Reader', null, '24.004', 980, 90, 260, 720],
+  ['Slack', null, '4.41', 380, 1200, 12, 300, 1, 0],
+  ['Microsoft Teams', null, '24295', 1300, 2900, 400, 800, 2, 3],
+  ['Visual Studio Code', null, '1.95', 590, 780, 1, 365],
+  ['VLC', null, '3.0.21', 180, 2, 130, 900],
+  ['Telegram', null, '11.4', 210, 1600, 30, 200],
+  ['Figma', null, '124.6', 420, 310, null, 95],
+] : [
+  ['Google Chrome', 'Google LLC', '131.0.6778.86', 507, 0, 0, 400, 0, 0, true],
+  ['Spotify', 'Spotify AB', '1.2.50', 448, 0, 6, 600, 3, 1],
+  ['Zoom Workplace', 'Zoom Video Communications', '6.2.0', 310, 0, 210, 500],
+  ['Adobe Acrobat (64-bit)', 'Adobe', '24.004', 1280, 0, 260, 720],
+  ['Discord', 'Discord Inc.', '1.0.9170', 119, 0, 20, 300, 1, 0],
+  ['Microsoft Teams classic', 'Microsoft Corporation', '1.7.00', 1300, 0, 400, 800, 2, 4],
+  ['Steam', 'Valve Corporation', '2.10.91', 1840, 0, 27, 900],
+  ['VLC media player', 'VideoLAN', '3.0.21', 180, 0, 130, 900],
+  ['pgAdmin 4 version 9.11', 'The pgAdmin Development Team', '9.11', 793, 0, 204, 220],
+  ['Microsoft Visual C++ 2015-2022 Redistributable (x64)', 'Microsoft Corporation', '14.40', 42, 0, null, 500, 0, 0, false, true],
+  ['Telegram Desktop', 'Telegram FZ-LLC', '5.8', 202, 0, null, 150],
+  ['WhatsApp', null, '2.2450', 360, 120, 2, 300, 0, 0, false, false, 'store'],
+  ['Solitaire & Casual Games', null, '4.21', 81, 4, null, 900, 0, 0, false, false, 'store'],
+];
+let APPS = APPS_SRC.map(([name, publisher, version, mb, data, used, inst, crashes = 0, hangs = 0, running = false, system = false, kind]) => ({
+  id: MAC_MOCK ? `/Applications/${name}.app` : kind === 'store' ? `appx:${name.replace(/\W/g, '')}_1.0.0.0_arm64__8wekyb3d8bbwe` : `reg:1:{${name.replace(/\W/g, '')}}`,
+  name, publisher, version, size: mb * MB, data: data * MB, installed: now - inst * DAY, lastUsed: used == null ? null : now - used * DAY,
+  crashes, hangs, kind: MAC_MOCK ? 'mac' : kind ?? 'app', icon: null, running, system,
+}));
+if (WORST) APPS = [...APPS, { id: 'reg:1:{long}', name: 'Northwind Industries Holdings — Portail Fournisseurs (édition entreprise, déploiement par machine) x64 FR', publisher: 'Northwind Industries Holdings International Software Division', version: '2026.10.31.4471-preview+build.88213', size: 1.24e12, data: 0, installed: now - 2000 * DAY, lastUsed: now - 1900 * DAY, crashes: 148, hangs: 37, kind: 'app', icon: null, running: false, system: false }];
+let STARTUP = MAC_MOCK ? [
+  { id: '~/Library/LaunchAgents/com.spotify.webhelper.plist', name: 'com.spotify.webhelper', command: '/Applications/Spotify.app/Contents/MacOS/SpotifyWebHelper', enabled: true, editable: true, scope: 'user', icon: null },
+  { id: '/Library/LaunchAgents/us.zoom.updater.plist', name: 'us.zoom.updater', command: '/Library/Application Support/zoom.us/ZoomUpdater', enabled: true, editable: true, scope: 'machine', icon: null },
+  { id: '/Library/LaunchAgents/com.adobe.ARMDCHelper.plist', name: 'com.adobe.ARMDCHelper', command: '/Library/Application Support/Adobe/ARMDC/ARMDCHelper', enabled: false, editable: true, scope: 'machine', icon: null },
+  { id: '/Library/LaunchDaemons/com.microsoft.autoupdate.helper.plist', name: 'com.microsoft.autoupdate.helper', command: '/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app/Contents/MacOS/Microsoft Update Assistant.app', enabled: true, editable: false, scope: 'machine', icon: null },
+] : [
+  { id: 'run:Spotify', name: 'Spotify', command: `"${USER}\\AppData\\Roaming\\Spotify\\Spotify.exe" --autostart --minimized`, enabled: true, editable: true, scope: 'user', icon: null },
+  { id: 'run:Discord', name: 'Discord', command: `"${USER}\\AppData\\Local\\Discord\\Update.exe" --processStart Discord.exe`, enabled: true, editable: true, scope: 'user', icon: null },
+  { id: 'run:Steam', name: 'Steam', command: '"C:\\Program Files (x86)\\Steam\\steam.exe" -silent', enabled: false, editable: true, scope: 'user', icon: null },
+  { id: 'folder:Send to OneNote.lnk', name: 'Send to OneNote', command: `${USER}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Send to OneNote.lnk`, enabled: true, editable: true, scope: 'user', icon: null },
+  { id: 'hklm:SecurityHealth', name: 'SecurityHealth', command: '%windir%\\system32\\SecurityHealthSystray.exe', enabled: true, editable: false, scope: 'machine', icon: null },
+];
+let UPDATES = MAC_MOCK ? null : [
+  { id: 'Spotify.Spotify', name: 'Spotify', version: '1.2.50', available: '1.2.52' },
+  { id: 'VideoLAN.VLC', name: 'VLC media player', version: '3.0.21', available: '3.0.23' },
+  { id: 'Git.Git', name: 'Git', version: '2.52.0', available: '2.56.0.4' },
+  { id: 'Microsoft.VisualStudioCode', name: 'Microsoft Visual Studio Code (User)', version: '1.94.0', available: '1.95.1' },
+];
+const appMethods = {
+  apps: async () => { await scaled(900); return { apps: APPS, tracking: true }; },
+  startup: async () => { await scaled(150); return STARTUP; },
+  async 'startup.set'({ id, enabled }) {
+    const s = STARTUP.find((x) => x.id === id);
+    if (!s) throw new Error('élément introuvable');
+    if (!s.editable) throw new Error('élément commun à tous les utilisateurs : à régler depuis le Gestionnaire des tâches');
+    STARTUP = STARTUP.map((x) => (x.id === id ? { ...x, enabled } : x));
+    return { enabled };
+  },
+  async 'apps.uninstall'({ id }) {
+    const a = APPS.find((x) => x.id === id);
+    if (!a) throw new Error('appli introuvable : actualise la liste');
+    if (MAC_MOCK && a.running) throw new Error(`${a.name} est ouverte : quitte-la d'abord`);
+    await scaled(700);
+    APPS = APPS.filter((x) => x.id !== id); // factice : rien n'est désinstallé nulle part
+    return MAC_MOCK ? { removed: 6, left: [] } : a.kind === 'store' ? { removed: true } : { launched: true };
+  },
+  async 'apps.reset'({ id }) {
+    const a = APPS.find((x) => x.id === id);
+    if (!MAC_MOCK || !a) throw new Error('réinitialisation disponible sur macOS seulement');
+    if (a.running) throw new Error(`${a.name} est ouverte : quitte-la d'abord`);
+    await scaled(500);
+    APPS = APPS.map((x) => (x.id === id ? { ...x, data: 0 } : x));
+    return { removed: 4, left: [] };
+  },
+  async updates() {
+    if (!UPDATES) throw new Error("pas de gestionnaire de mises à jour commun sur macOS : l'App Store et chaque appli s'en chargent");
+    await scaled(1500);
+    return UPDATES;
+  },
+  async 'updates.install'({ id }) {
+    if (!UPDATES?.some((u) => u.id === id)) throw new Error('mise à jour inconnue : actualise la liste');
+    await scaled(2500);
+    if (id === 'Git.Git') throw new Error('Le programme d’installation a échoué avec le code de sortie 1603');
+    UPDATES = UPDATES.filter((u) => u.id !== id);
+    return { updated: true };
+  },
+};
+
 const methods = {
   hello: async () => ({ version: '0.1.0-mock', dataDir: 'C:\\mock', drives }),
   drives: async () => drives,
@@ -184,6 +276,7 @@ const methods = {
   'ignore.add': async ({ path: p }) => { if (!/^[A-Za-z]:\\/.test(p)) throw new Error('chemin invalide'); if (!settings.ignore.includes(p)) settings.ignore = [...settings.ignore, p]; return settings; },
   'ignore.remove': async ({ path: p }) => { settings.ignore = settings.ignore.filter((x) => x.toLowerCase() !== p.toLowerCase()); return settings; },
   history: async () => history,
+  ...appMethods,
 };
 
 send({ event: 'ready', data: { version: '0.1.0-mock' } });

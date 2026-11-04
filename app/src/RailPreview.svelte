@@ -3,6 +3,7 @@
   import { fmt, date, drive, idle, plural } from './lib/fmt.js';
   import { norm } from './lib/ui/kube.js';
   import Icon from './lib/Icon.svelte';
+  import { A, UNUSED_DAYS } from './lib/apps.svelte.js';
 
   let { page, navigate, close } = $props();
   let query = $state('');
@@ -98,6 +99,13 @@
         </label><button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher {name(file.path)} {OS.inFinder}" onclick={() => S.reveal(file.path)}><Icon name="folder-open" /></button></div>
       {/each}
       {#if !files.length}<p class="kc-preview-empty">{needle ? 'Aucun fichier ne correspond à ta recherche.' : S.scan ? 'Aucun fichier personnel ne correspond à tes critères.' : 'Les fichiers apparaîtront après l’analyse.'}</p>{/if}
+    {:else if page.id === 'apps'}
+      {#if A.list}
+        <div class="kc-preview-summary"><span>{plural(A.list.length, 'appli', 'applis')}</span><strong>{plural(A.unused.length, 'inutilisée', 'inutilisées')}</strong></div>
+        <p class="kc-preview-caption">Pas ouvertes depuis {UNUSED_DAYS} jours, les plus lourdes d’abord.</p>
+        {#each A.unused.slice(0, 8) as a (a.id)}<div class="kc-preview-category"><Icon name="app-window" /><span>{a.name}</span><strong>{fmt(a.size + a.data)}</strong></div>{/each}
+        {#if A.unstable.length}<section class="kc-preview-section"><h3>Plantages récents</h3><p class="kc-preview-caption">{A.unstable.slice(0, 5).map((a) => a.name).join(' · ')}</p></section>{/if}
+      {:else}<p class="kc-preview-empty">{A.loading ? 'Lecture des applications…' : 'La liste se charge à l’ouverture de la page.'}</p>{/if}
     {:else if page.id === 'history'}
       <div class="kc-preview-summary"><span>{plural(S.history.length, 'nettoyage', 'nettoyages')}</span><strong>{fmt(S.history.reduce((sum, entry) => sum + Math.max(0, entry.diskGain), 0))} regagnés</strong></div>
       <p class="kc-preview-caption">Les plus récents d’abord. Chaque bilan indique la variation réelle d’espace libre.</p>

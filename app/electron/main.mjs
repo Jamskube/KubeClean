@@ -18,7 +18,7 @@ const CORE = app.isPackaged
   ? path.join(process.resourcesPath, CORE_NAME)
   : path.join(here, '..', '..', 'core', 'target', 'release', CORE_NAME);
 const ORIGIN = 'app://kubeclean';
-const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history']);
+const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history', 'apps', 'apps.uninstall', 'apps.reset', 'startup', 'startup.set', 'updates', 'updates.install']);
 
 if (!app.requestSingleInstanceLock()) app.quit(); // two engines cleaning the same disk: never
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
@@ -94,6 +94,15 @@ ipcMain.handle('reveal', (e, p) => {
 // unpackaged, app.getVersion() is Electron's own version: read ours from package.json
 const APP_VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
 ipcMain.handle('app-version', () => APP_VERSION);
+// icône d'une appli (exe, .app, raccourci) : lue par le système, jamais par la page
+ipcMain.handle('file-icon', async (e, p) => {
+  if (!fromApp(e) || !isAbs(p) || !fs.existsSync(p)) return null;
+  try { return (await app.getFileIcon(p, { size: 'normal' })).toDataURL(); } catch { return null; }
+});
+// réglages du système pour ce que le moteur ne peut pas lister (éléments d'ouverture modernes)
+ipcMain.handle('open-startup-settings', (e) => {
+  if (fromApp(e)) shell.openExternal(MAC ? 'x-apple.systempreferences:com.apple.LoginItems-Settings.extension' : 'ms-settings:startupapps');
+});
 ipcMain.handle('pick-folder', async (e) => {
   if (!fromApp(e)) return null;
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Dossier de projets' });

@@ -9,6 +9,10 @@ use std::process::Command;
 use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives};
 use windows_sys::Win32::System::Com::CoInitializeEx;
+use windows_sys::Win32::System::Registry::{
+    HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE, REG_BINARY, REG_DWORD, REG_EXPAND_SZ, REG_SZ, RegCloseKey, RegCreateKeyExW, RegEnumKeyExW,
+    RegEnumValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
+};
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS};
 use windows_sys::Win32::System::Threading::{GetExitCodeProcess, INFINITE, WaitForSingleObject};
 use windows_sys::Win32::UI::Shell::{
@@ -150,6 +154,173 @@ pub fn run_self_elevated(args: &str) -> ElevatedRun {
     }
 }
 
+// ---------- registre ----------
+
+#[derive(Clone, Copy)]
+pub enum Hive {
+    User,
+    Machine,
+}
+
+/// Clé de registre ouverte, refermée en sortie de portée.
+pub struct RegKey(HKEY);
+impl Drop for RegKey {
+    fn drop(&mut self) {
+        unsafe { RegCloseKey(self.0) };
+    }
+}
+
+fn reg_text(data: &[u8]) -> String {
+    let w: Vec<u16> = data.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    let end = w.iter().position(|&c| c == 0).unwrap_or(w.len());
+    String::from_utf16_lossy(&w[..end])
+}
+
+impl RegKey {
+    fn root(h: Hive) -> HKEY {
+        match h {
+            Hive::User => HKEY_CURRENT_USER,
+            Hive::Machine => HKEY_LOCAL_MACHINE,
+        }
+    }
+    pub fn open(hive: Hive, path: &str) -> Option<RegKey> {
+        let mut h: HKEY = std::ptr::null_mut();
+        let ok = unsafe { RegOpenKeyExW(Self::root(hive), wide(OsStr::new(path)).as_ptr(), 0, KEY_READ, &mut h) } == 0;
+        ok.then_some(RegKey(h))
+    }
+    /// Ouverte en écriture, créée si absente (HKCU seulement : jamais de droits administrateur).
+    pub fn create_user(path: &str) -> Option<RegKey> {
+        let mut h: HKEY = std::ptr::null_mut();
+        let ok = unsafe {
+            RegCreateKeyExW(HKEY_CURRENT_USER, wide(OsStr::new(path)).as_ptr(), 0, std::ptr::null(), 0, KEY_READ | KEY_SET_VALUE, std::ptr::null(), &mut h, std::ptr::null_mut())
+        } == 0;
+        ok.then_some(RegKey(h))
+    }
+    pub fn subkeys(&self) -> Vec<String> {
+        let mut out = vec![];
+        let mut buf = [0u16; 512];
+        for i in 0..100_000 {
+            let mut len = buf.len() as u32;
+            let r = unsafe { RegEnumKeyExW(self.0, i, buf.as_mut_ptr(), &mut len, std::ptr::null(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()) };
+            match r {
+                0 => out.push(String::from_utf16_lossy(&buf[..len as usize])),
+                259 => break, // ERROR_NO_MORE_ITEMS
+                _ => {}       // nom trop long : on l'ignore
+            }
+        }
+        out
+    }
+    /// (nom, type, données brutes) de chaque valeur.
+    pub fn values(&self) -> Vec<(String, u32, Vec<u8>)> {
+        let mut out = vec![];
+        let mut name = vec![0u16; 16_384];
+        let mut data = vec![0u8; 4096];
+        let mut i = 0;
+        while i < 100_000 {
+            let (mut nl, mut dl, mut ty) = (name.len() as u32, data.len() as u32, 0u32);
+            let r = unsafe { RegEnumValueW(self.0, i, name.as_mut_ptr(), &mut nl, std::ptr::null(), &mut ty, data.as_mut_ptr(), &mut dl) };
+            if r == 234 && (dl as usize) > data.len() {
+                data.resize(dl as usize, 0); // ERROR_MORE_DATA : même valeur, tampon agrandi
+                continue;
+            }
+            if r != 0 {
+                break;
+            }
+            out.push((String::from_utf16_lossy(&name[..nl as usize]), ty, data[..dl as usize].to_vec()));
+            i += 1;
+        }
+        out
+    }
+    fn raw(&self, name: &str) -> Option<(u32, Vec<u8>)> {
+        let n = wide(OsStr::new(name));
+        let (mut ty, mut len) = (0u32, 0u32);
+        if unsafe { RegQueryValueExW(self.0, n.as_ptr(), std::ptr::null(), &mut ty, std::ptr::null_mut(), &mut len) } != 0 {
+            return None;
+        }
+        let mut data = vec![0u8; len as usize];
+        (unsafe { RegQueryValueExW(self.0, n.as_ptr(), std::ptr::null(), &mut ty, data.as_mut_ptr(), &mut len) } == 0).then(|| {
+            data.truncate(len as usize);
+            (ty, data)
+        })
+    }
+    pub fn string(&self, name: &str) -> Option<String> {
+        let (ty, d) = self.raw(name)?;
+        matches!(ty, REG_SZ | REG_EXPAND_SZ).then(|| reg_text(&d)).filter(|s| !s.trim().is_empty())
+    }
+    pub fn dword(&self, name: &str) -> Option<u32> {
+        let (ty, d) = self.raw(name)?;
+        (ty == REG_DWORD && d.len() >= 4).then(|| u32::from_le_bytes([d[0], d[1], d[2], d[3]]))
+    }
+    pub fn set_binary(&self, name: &str, data: &[u8]) -> bool {
+        unsafe { RegSetValueExW(self.0, wide(OsStr::new(name)).as_ptr(), 0, REG_BINARY, data.as_ptr(), data.len() as u32) == 0 }
+    }
+}
+
+pub fn reg_value_text(data: &[u8]) -> String {
+    reg_text(data)
+}
+
+/// « "C:\x\unins000.exe" /SILENT » -> (fichier, paramètres). Une ligne sans guillemets se coupe
+/// après le premier « .exe ». MsiExec /I (modifier) devient /X (désinstaller).
+pub fn split_command(cmd: &str) -> Option<(String, String)> {
+    let c = cmd.trim();
+    let (file, params) = if let Some(rest) = c.strip_prefix('"') {
+        let end = rest.find('"')?;
+        (rest[..end].to_string(), rest[end + 1..].trim().to_string())
+    } else {
+        let i = c.to_ascii_lowercase().find(".exe")? + 4;
+        (c.get(..i)?.to_string(), c.get(i..)?.trim().to_string())
+    };
+    let msi = file.to_ascii_lowercase().ends_with("msiexec.exe") || file.eq_ignore_ascii_case("msiexec");
+    let params = match params.get(..2) {
+        Some(p) if msi && p.eq_ignore_ascii_case("/i") => format!("/X{}", &params[2..]),
+        _ => params,
+    };
+    (!file.is_empty()).then_some((file, params))
+}
+
+/// Ouvre un programme comme le ferait l'Explorateur (son propre UAC s'il en demande un), sans attendre.
+pub fn launch(file: &str, params: &str) -> Result<(), String> {
+    let verb = wide(OsStr::new("open"));
+    let f = wide(OsStr::new(file));
+    let p = wide(OsStr::new(params));
+    let mut sei: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+    sei.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    sei.fMask = SEE_MASK_NOASYNC;
+    sei.lpVerb = verb.as_ptr();
+    sei.lpFile = f.as_ptr();
+    sei.lpParameters = p.as_ptr();
+    sei.nShow = 1; // SW_SHOWNORMAL
+    if unsafe { ShellExecuteExW(&mut sei) } == 0 {
+        let err = std::io::Error::last_os_error();
+        return Err(if err.raw_os_error() == Some(1223) { "désinstallation annulée".into() } else { err.to_string() });
+    }
+    Ok(())
+}
+
+/// Script PowerShell FIXE ; les données passent par l'environnement (jamais dans le source).
+pub fn powershell(script: &str, env: &[(&str, &str)]) -> Result<String, String> {
+    let mut cmd = Command::new(system32(r"WindowsPowerShell\v1.0\powershell.exe"));
+    cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &format!("[Console]::OutputEncoding=[Text.Encoding]::UTF8;{script}")])
+        .creation_flags(CREATE_NO_WINDOW);
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let out = cmd.output().map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("PowerShell a échoué").trim().to_string())
+    }
+}
+
+pub fn command_no_window(exe: &str) -> Command {
+    let mut c = Command::new(exe);
+    c.creation_flags(CREATE_NO_WINDOW);
+    c
+}
+
 fn system32(exe: &str) -> PathBuf {
     let root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
     Path::new(&root).join("System32").join(exe)
@@ -184,6 +355,22 @@ mod tests {
         assert!(!fixed_drives().is_empty());
         let procs = running_processes();
         assert!(procs.iter().any(|p| p == "explorer.exe" || p.ends_with(".exe")));
+    }
+    #[test]
+    fn uninstall_commands_split() {
+        let s = |c: &str| split_command(c).map(|(f, p)| (f, p));
+        assert_eq!(s(r#""C:\Program Files\X\unins000.exe" /SILENT"#), Some((r"C:\Program Files\X\unins000.exe".into(), "/SILENT".into())));
+        assert_eq!(s(r"C:\Program Files\Y App\uninstall.exe --remove"), Some((r"C:\Program Files\Y App\uninstall.exe".into(), "--remove".into())));
+        assert_eq!(s("MsiExec.exe /I{1234-ABCD}"), Some(("MsiExec.exe".into(), "/X{1234-ABCD}".into())));
+        assert_eq!(s("MsiExec.exe /X{1234-ABCD}"), Some(("MsiExec.exe".into(), "/X{1234-ABCD}".into())));
+        assert_eq!(s(r#""C:\a.exe""#), Some((r"C:\a.exe".into(), "".into())));
+        assert_eq!(s("rundll32 something"), None);
+    }
+    #[test]
+    fn registry_reads_and_lists() {
+        let k = RegKey::open(Hive::Machine, r"Software\Microsoft\Windows NT\CurrentVersion").expect("clé système lisible");
+        assert!(k.string("ProductName").is_some());
+        assert!(RegKey::open(Hive::Machine, r"Software\Microsoft").unwrap().subkeys().iter().any(|s| s.eq_ignore_ascii_case("Windows")));
     }
     #[test]
     #[ignore = "puts a 1-byte file in the real Recycle Bin; run with --ignored"]

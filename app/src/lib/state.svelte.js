@@ -36,7 +36,7 @@ export const catColor = (id) => `var(--k-chart-${CATS.find((c) => c.id === id)?.
 /** display names of processes reported in `blockedBy` */
 export const APP_NAMES = { 'google chrome': 'Chrome', 'microsoft edge': 'Edge', 'brave browser': 'Brave', explorer: 'Explorateur', chrome: 'Chrome', msedge: 'Edge', brave: 'Brave', firefox: 'Firefox', 'ms-teams': 'Teams', teams: 'Teams', code: 'VS Code', telegram: 'Telegram', spotify: 'Spotify', steam: 'Steam', onedrive: 'OneDrive' };
 export const appName = (p) => APP_NAMES[p.toLowerCase()] ?? p;
-export const VIEWS = ['dashboard', 'clean', 'projects', 'files', 'history', 'settings', 'result'];
+export const VIEWS = ['dashboard', 'clean', 'projects', 'files', 'apps', 'history', 'settings', 'result'];
 
 /** rules whose items can be ticked one by one */
 export const pickable = (r) => r.kind !== 'elevated' && r.kind !== 'recycleBin';

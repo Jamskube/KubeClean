@@ -60,6 +60,15 @@ largeur du panneau, tandis que les titres, filtres et actions restent alignés
 avec la colonne de contenu.
 Les transitions, le redimensionnement et la mémorisation utilisent le runtime Kube.
 
+La page Applications (`Apps.svelte`, état dans `src/lib/apps.svelte.js`) se charge à
+la première visite : applis inutilisées (dernière ouverture connue de plus de 90 jours,
+jamais les composants système), plantages des 30 derniers jours, liste complète,
+démarrage (bascules réversibles) et, sous Windows, mises à jour winget. Désinstaller
+ouvre le désinstalleur officiel (Windows) ou envoie l’appli et ses données à la
+Corbeille (Mac) ; « Réinitialiser » (Mac) n’envoie que les données. Toujours après
+confirmation, jamais pendant une analyse ou un nettoyage. Les icônes viennent de
+`app.getFileIcon` côté Electron.
+
 - `npm run icon` : compose le motif sur une tuile blanche, vérifie l’absence de
   tache au centre et régénère les PNG et l’ICO (16, 24, 32, 48, 64, 128, 256 px).
 - `npm run check` puis `npm run build` : vérifie Svelte et compile l’interface.

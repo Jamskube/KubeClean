@@ -4,6 +4,7 @@
 //!   event    {"event":"progress","data":{…}}
 //! `kubeclean-core --elevated <tasks> --out <file>` is the UAC-elevated helper.
 
+mod apps;
 mod clean;
 mod fsutil;
 mod rules;
@@ -149,6 +150,29 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             Ok(json!(s))
         }
         "history" => Ok(json!(c.store.history())),
+        "apps" => Ok(json!(apps::list())),
+        "startup" => Ok(json!(apps::startup())),
+        "updates" => apps::updates().map(|u| json!(u)),
+        "apps.uninstall" | "apps.reset" | "updates.install" => {
+            #[derive(Deserialize)]
+            struct P { id: String }
+            let p: P = serde_json::from_value(params).map_err(|e| e.to_string())?;
+            let _b = take_busy(c)?; // jamais pendant une analyse ou un nettoyage
+            match method {
+                "apps.uninstall" => apps::uninstall(&p.id),
+                "updates.install" => apps::upgrade(&p.id),
+                #[cfg(target_os = "macos")]
+                _ => apps::reset(&p.id),
+                #[cfg(not(target_os = "macos"))]
+                _ => Err("réinitialisation disponible sur macOS seulement".into()),
+            }
+        }
+        "startup.set" => {
+            #[derive(Deserialize)]
+            struct P { id: String, enabled: bool }
+            let p: P = serde_json::from_value(params).map_err(|e| e.to_string())?;
+            apps::set_startup(&p.id, p.enabled)
+        }
         _ => Err(format!("méthode inconnue : {method}")),
     }
 }

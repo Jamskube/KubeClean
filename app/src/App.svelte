@@ -10,6 +10,7 @@
   import CleanView from './CleanView.svelte';
   import Projects from './Projects.svelte';
   import Files from './Files.svelte';
+  import Apps from './Apps.svelte';
   import History from './History.svelte';
   import Settings from './Settings.svelte';
   import Result from './Result.svelte';
@@ -27,6 +28,7 @@
     { id: 'clean', label: 'Nettoyage', icon: 'broom-sparkles' },
     { id: 'projects', label: 'Projets', icon: 'folder-code' },
     { id: 'files', label: 'Fichiers', icon: 'file-archive' },
+    { id: 'apps', label: 'Applications', icon: 'app-window' },
     { id: 'history', label: 'Historique', icon: 'clock-arrow-left' },
     { id: 'settings', label: 'Réglages', icon: 'settings' },
   ].filter((n) => !(MAC && n.id === 'projects'));
@@ -206,6 +208,7 @@
                   {:else if S.view === 'clean'}<CleanView />
                   {:else if S.view === 'projects'}<Projects />
                   {:else if S.view === 'files'}<Files />
+                  {:else if S.view === 'apps'}<Apps />
                   {:else if S.view === 'history'}<History />
                   {:else if S.view === 'settings'}<Settings />
                   {:else if S.view === 'result'}<Result />{/if}

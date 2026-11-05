@@ -11,6 +11,7 @@ Interface Electron + Svelte 5 qui pilote `kubeclean-core.exe`.
 | `src/` | Vues Svelte (`App`, `Dashboard`, `CleanView`, `Projects`, `Files`, `History`, `Settings`…) et `lib/` |
 | `scripts/mock-core.mjs` | Moteur factice (`KC_MOCK=1`) |
 | `scripts/shot.mjs` | Captures automatisées |
+| `scripts/close-check.mjs` | Fermeture en pleine analyse sans exception (moteur factice) |
 | `scripts/make-icon.mjs` | Génère l'icône (`npm run icon`) |
 | `build/icon-master.png` | Source détourée du modèle 13 choisi : anneau métallique et flèche ; brief dans `build/icon-design.md` |
 | `public/icon.png`, `build/icon.png`, `build/icon.ico` | Déclinaisons pour l’interface, la fenêtre et l’installeur Windows |

@@ -24,6 +24,9 @@ if (!app.requestSingleInstanceLock()) app.quit(); // two engines cleaning the sa
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 let win = null;
+// à la fermeture, le moteur s'arrête APRÈS la fenêtre (stdin fermé) : un envoi vers une fenêtre
+// détruite lève « Object has been destroyed », que macOS affiche en « JavaScript error »
+const toPage = (ch, m) => { if (win && !win.isDestroyed()) win.webContents.send(ch, m); };
 
 // ---------- core process ----------
 let core = null;
@@ -42,7 +45,7 @@ function startCore() {
   readline.createInterface({ input: p.stdout }).on('line', (line) => {
     let m;
     try { m = JSON.parse(line); } catch { return; }
-    if (m.event) return win?.webContents.send('core-event', m);
+    if (m.event) return toPage('core-event', m);
     const h = pending.get(m.id);
     pending.delete(m.id);
     methods.delete(m.id);
@@ -56,10 +59,11 @@ function startCore() {
     for (const h of pending.values()) h({ error: killed ? 'analyse annulée' : `le moteur s'est arrêté (${why})` });
     pending.clear();
     methods.clear();
-    if (!killed) win?.webContents.send('core-event', { event: 'core-exit', data: why });
+    if (!killed) toPage('core-event', { event: 'core-exit', data: why });
   };
   p.on('exit', (code) => gone(`code ${code}`));
   p.on('error', (e) => gone(e.message));
+  p.stdin.on('error', () => {}); // EPIPE si le moteur est déjà parti : 'exit' s'en charge
   return p;
 }
 
@@ -153,6 +157,7 @@ function createWindow() {
   });
   if (!MAC) win.removeMenu(); // macOS keeps its app menu: Quit, Copy, Paste
   win.once('ready-to-show', () => win.show());
+  win.on('closed', () => { win = null; });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.on('close', (e) => {
@@ -190,7 +195,7 @@ app.whenReady().then(() => {
       win.setBackgroundColor(overlay().color);
       win.setTitleBarOverlay(overlay());
     }
-    win.webContents.send('backdrop', backdrop());
+    toPage('backdrop', backdrop());
   });
   // the default macOS menu is in English: same roles, French labels
   if (MAC) Menu.setApplicationMenu(Menu.buildFromTemplate([

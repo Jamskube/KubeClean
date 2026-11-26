@@ -155,7 +155,7 @@
           <SidebarSummary />
           <section class="k-nav-section" data-kube="nav-section" data-kube-key="kubeclean:cats">
             <div class="k-nav-section__title">
-              <button class="k-nav-section__toggle" type="button" aria-expanded="true"><span class="k-nav-section__label">Catégories</span><svg class="k-icon k-nav-section__chevron" aria-hidden="true"><use href="kube/icons/kube-icons.svg#chevron-down"></use></svg></button>
+              <button class="k-nav-section__toggle" type="button" aria-expanded="true"><span class="k-nav-section__label">Catégories</span><Icon name="chevron-down" class="k-nav-section__chevron" /></button>
             </div>
             <div class="k-nav-section__body">
               <div class="k-nav-list">

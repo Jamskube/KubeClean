@@ -14,6 +14,9 @@ Moteur Rust `kubeclean-core.exe` : analyse et nettoyage du disque, piloté en JS
 | `src/store.rs` | Persistance (historique, réglages) |
 | `src/space.rs` | Cartographie de l’espace (méthode `space`) : taille de chaque élément d’un dossier, lecture seule, mémoire des sous-dossiers déjà mesurés ; ni lien, ni autre volume, ni stockage du téléphone ; paquets Mac mesurés par `du` |
 | `src/apps.rs` | Applications installées (dernière ouverture, taille, plantages), désinstallation, démarrage, mises à jour ; `apps/win.rs` (registre Uninstall, Store, UserAssist, WER, StartupApproved, winget) et `apps/mac.rs` (/Applications, Spotlight, ~/Library, DiagnosticReports, launchctl) |
+| `src/worktrees.rs` | Copies de travail git (`worktrees`, `worktrees.remove`) : trouvées sous les racines de projets ; retirables seulement sans modification ni fichier ignoré à valeur (`.env`, données), jamais verrouillées ; retrait par `git worktree remove` (sans `--force`) ou `prune` si le dossier a disparu, après revérification |
+| `src/growth.rs` | « Ça grossit vite » (`growth`) : taille des dossiers d'applis (ProgramData, AppData ; Bibliothèque sur Mac) mesurée au plus toutes les 6 h dans `growth.json`, comparée à une mesure d'au moins 20 h ; signale +2 Go, ou +500 Mo avec taille doublée ; lecture seule |
+| `src/dupes.rs` | Doublons (`dupes`, `dupes.trash`) : fichiers de 1 Mo et plus, groupés par taille puis empreinte ; ni dossier caché, ni données d'applis, ni artefacts, ni fichier OneDrive/iCloud non local ; chaque copie est recomparée octet par octet avec celle gardée avant de partir à la Corbeille |
 | `src/win.rs` | API Windows (Corbeille, UAC, processus, registre), module `os` sous Windows |
 | `src/mac.rs` | API macOS (volume de démarrage, processus, Corbeille par NSFileManager chargé à l’exécution), module `os` sous macOS ; aucune tâche admin |
 | `rules/default.json` | Règles de nettoyage Windows |

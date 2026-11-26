@@ -1,9 +1,10 @@
 <script>
   import { tick } from 'svelte';
-  import { S, CATS, catColor, appName, MAC } from './lib/state.svelte.js';
+  import { S, CATS, catColor, appName, MAC, OS } from './lib/state.svelte.js';
   import { fmt, date, drive, plural } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
+  import { X } from './lib/extras.svelte.js';
 
   const scanning = $derived(S.busy === 'scan');
   const rules = $derived(scanning ? S.live : S.rules);
@@ -78,6 +79,24 @@
       <p class="kc-storage__note">Mesure actuelle. L’espace réellement récupéré sera mesuré après le nettoyage.</p>
     </section>
 
+    {#if X.growth?.growers.length && !X.growthHidden && !scanning}
+      <!-- ce qui a pris de la place tout seul depuis la mesure de référence : prévenir, pas supprimer -->
+      <section class="k-card k-card--full kc-growth" aria-labelledby="growth-title">
+        <div class="kc-growth__head">
+          <span class="kc-feature-icon kc-growth__icon"><Icon name="trending-up" /></span>
+          <div class="kc-row-copy"><h2 id="growth-title">Ça grossit vite</h2><span>Depuis le {date(X.growth.since)}, sans que tu y touches. Souvent des journaux ou un cache qui s’emballe : regarde quelle appli écrit là.</span></div>
+          <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Masquer jusqu’au prochain lancement" data-kube="tooltip" onclick={() => (X.growthHidden = true)}><Icon name="x" /></button>
+        </div>
+        {#each X.growth.growers as g (g.path)}
+          <div class="kc-growth__row">
+            <span class="kc-row-copy"><strong>{g.name}</strong><span>{fmt(g.before)} → {fmt(g.after)}</span></span>
+            <span class="kc-growth__delta">+{fmt(g.after - g.before)}</span>
+            <button class="k-btn k-btn--ghost k-btn--icon k-btn--sm" type="button" aria-label="Afficher {g.name} {OS.inFinder}" data-kube="tooltip" onclick={() => S.reveal(g.path)}><Icon name="folder-open" /></button>
+          </div>
+        {/each}
+      </section>
+    {/if}
+
     <button class="kc-review" type="button" disabled={!!S.busy} onclick={() => { S.cleanFilter = 'review'; S.view = 'clean'; }}>
       <Icon name="scan-eye" /><span class="kc-review__copy"><strong>À examiner avec toi</strong><span>{MAC ? 'Gros fichiers, installeurs et vieux téléchargements à choisir.' : 'Fichiers personnels, projets et opérations à choisir.'}</span></span>
       <span class="kc-review__amount"><Num value={review} /><Icon name="arrow-right" /></span>
@@ -147,6 +166,12 @@
   .kc-storage__drive > span { margin-inline-start: auto; color: var(--ink-secondary); }
   .kc-storage__drive > :global(.k-icon) { color: var(--ink-secondary); }
   .kc-storage__note { font-size: 12px; line-height: 1.6; color: var(--ink-secondary); margin: auto 0 0; padding-top: var(--space-4); }
+  .kc-growth { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) var(--space-5); }
+  .kc-growth__head { display: flex; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-1); }
+  .kc-growth__head .kc-row-copy > span { white-space: normal; line-height: 1.5; }
+  .kc-growth__icon { color: var(--warning); background: color-mix(in oklab, var(--warning) 14%, transparent); flex: none; }
+  .kc-growth__row { display: flex; align-items: center; gap: var(--space-3); padding: 8px 4px; border-top: 1px solid var(--border-light); }
+  .kc-growth__delta { font-size: 15px; font-weight: 600; color: var(--warning); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .kc-review { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-4); text-align: left; padding: var(--space-4) var(--space-5); border: 1px solid var(--border); background: var(--fill-subtle); border-radius: var(--radius-xl); color: var(--ink); transition: background var(--duration-basic); }
   .kc-review:hover:not(:disabled) { background: var(--fill-secondary); }
   .kc-review:disabled { cursor: default; }

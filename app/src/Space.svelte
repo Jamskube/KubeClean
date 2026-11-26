@@ -29,12 +29,14 @@
 </script>
 
 <script>
-  // « Espace » : ce qui occupe un dossier, en tuiles et en liste. Lecture seule : on montre,
-  // on ouvre dans l'Explorateur ou le Finder, on ne supprime rien d'ici.
+  // « Espace » : ce qui occupe un dossier, en tuiles et en liste. La carte ne fait que montrer ;
+  // seuls les doublons, sur choix explicite de la copie à garder, partent à la Corbeille.
   import { S, OS } from './lib/state.svelte.js';
   import { fmt, plural } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
+  import Dupes from './Dupes.svelte';
+  import { X } from './lib/extras.svelte.js';
 
   let mapW = $state(0);
   const MAP_H = 280;
@@ -42,6 +44,12 @@
   const tiles = $derived(M.listing ? squarify(M.listing.entries.filter((e) => e.size > 0).slice(0, 40), mapW, MAP_H) : []);
   const max = $derived(M.listing?.entries[0]?.size || 1);
   const progress = $derived(M.loading ? S.spaceProgress : null);
+  const dupesMode = $derived(!!(X.dupes || X.dupesLoading || X.dupesError));
+  function closeDupes() {
+    if (X.dupesLoading) kc.call('cancel', { what: 'dupes' }).catch(() => {});
+    X.dupes = null;
+    X.dupesError = '';
+  }
 
   async function open(path, label, push = true, refresh = false) {
     if (M.loading) return;
@@ -86,12 +94,13 @@
     <div class="k-page-header__content">
       <div class="k-page-header__heading">
         <h1 class="k-page-header__title">Espace disque</h1>
-        <p class="k-page-header__subtitle">Ce qui occupe chaque dossier, du plus lourd au plus léger. Rien n’est supprimé d’ici : ouvre un élément {OS.inFinder} pour décider.</p>
-        {#if M.listing && !M.loading}<p class="kc-summary"><Num value={M.listing.size} /> · {plural(M.listing.files, 'fichier', 'fichiers')}</p>{/if}
+        <p class="k-page-header__subtitle">{dupesMode ? 'Les fichiers au contenu identique, groupés. Tu choisis la copie à garder.' : `Ce qui occupe chaque dossier, du plus lourd au plus léger. Ouvre un élément ${OS.inFinder} pour décider.`}</p>
+        {#if M.listing && !M.loading && !dupesMode}<p class="kc-summary"><Num value={M.listing.size} /> · {plural(M.listing.files, 'fichier', 'fichiers')}</p>{/if}
       </div>
       {#if current}
         <div class="k-page-header__actions">
-          <button class="k-btn k-btn--ghost k-btn--sm" type="button" disabled={M.loading} onclick={() => open(current.path, current.label, false, true)}><Icon name="refresh-cw" />Actualiser</button>
+          {#if !dupesMode}<button class="k-btn k-btn--sm" type="button" data-action="find-dupes" disabled={M.loading} onclick={() => X.findDupes([current.path], current.label)}><Icon name="copy" />Chercher les doublons</button>{/if}
+          <button class="k-btn k-btn--ghost k-btn--sm" type="button" disabled={M.loading || dupesMode} onclick={() => open(current.path, current.label, false, true)}><Icon name="refresh-cw" />Actualiser</button>
         </div>
       {/if}
     </div>
@@ -117,7 +126,9 @@
     </nav>
   {/if}
 
-  {#if M.loading}
+  {#if dupesMode}
+    <Dupes onclose={closeDupes} />
+  {:else if M.loading}
     <div class="kc-measure" role="status">
       <div class="kc-measure__line"><span>{progress ? `Mesure… ${progress.done}/${progress.total} · ${progress.label}` : 'Mesure…'}</span>
         <button class="k-btn k-btn--ghost k-btn--xs" type="button" onclick={() => kc.call('cancel', { what: 'space' }).catch(() => {})}>Annuler</button></div>

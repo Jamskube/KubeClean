@@ -13,6 +13,7 @@
   import Apps from './Apps.svelte';
   import Space from './Space.svelte';
   import { A } from './lib/apps.svelte.js';
+  import { X } from './lib/extras.svelte.js';
   import History from './History.svelte';
   import Settings from './Settings.svelte';
   import Result from './Result.svelte';
@@ -81,7 +82,8 @@
   onMount(() => requestAnimationFrame(() => (armed = true)));
   // la liste des applis demande quelques secondes au système : préparée dès la fin de l'analyse,
   // jamais pendant (les deux liraient le disque en même temps), la page s'ouvre aussitôt
-  $effect(() => { if (S.scan && !S.busy) untrack(() => A.load()); });
+  // après une analyse : la liste des applis, et la croissance des dossiers (remesurée au plus toutes les 6 h)
+  $effect(() => { if (S.scan && !S.busy) untrack(() => { A.load(); X.loadGrowth(); }); });
 
   async function go(view, cat) {
     closePreviews();

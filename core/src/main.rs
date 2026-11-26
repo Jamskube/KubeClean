@@ -6,11 +6,14 @@
 
 mod apps;
 mod clean;
+mod dupes;
 mod fsutil;
+mod growth;
 mod rules;
 mod scan;
 mod space;
 mod store;
+mod worktrees;
 #[cfg_attr(windows, path = "win.rs")]
 #[cfg_attr(target_os = "macos", path = "mac.rs")]
 mod os;
@@ -38,6 +41,11 @@ struct Core {
     /// la carte de l'espace ne fait que lire : elle tourne à côté d'une analyse ou d'un nettoyage
     space_busy: AtomicBool,
     space_cancel: AtomicBool,
+    dupes_busy: AtomicBool,
+    dupes_cancel: AtomicBool,
+    /// lectures de fond (croissance, copies git) : arrêtées seulement quand Electron s'en va
+    growth_busy: AtomicBool,
+    bg_cancel: AtomicBool,
     out: Mutex<std::io::Stdout>,
 }
 
@@ -75,8 +83,12 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
         "hello" => Ok(json!({ "version": env!("CARGO_PKG_VERSION"), "dataDir": c.data_dir(), "drives": os::fixed_drives() })),
         "drives" => Ok(json!(os::fixed_drives())),
         "cancel" => {
-            let space = params.get("what").and_then(Value::as_str) == Some("space");
-            (if space { &c.space_cancel } else { &c.cancel }).store(true, Ordering::SeqCst);
+            let flag = match params.get("what").and_then(Value::as_str) {
+                Some("space") => &c.space_cancel,
+                Some("dupes") => &c.dupes_cancel,
+                _ => &c.cancel,
+            };
+            flag.store(true, Ordering::SeqCst);
             Ok(json!(true))
         }
         "scan" => {
@@ -185,6 +197,55 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
             let progress = |done: usize, total: usize, label: &str| c.event("progress", json!({ "phase": "space", "done": done, "total": total, "label": label }));
             space::list(&path, p.refresh, &c.space_cancel, &progress).map(|l| json!(l))
         }
+        "worktrees" => worktrees::list(&project_roots(c), &c.bg_cancel).map(|w| json!(w)),
+        "worktrees.remove" => {
+            #[derive(Deserialize)]
+            struct P { paths: Vec<String> }
+            let p: P = serde_json::from_value(params).map_err(|e| e.to_string())?;
+            let _b = take_busy(c)?;
+            let (removed, refused) = worktrees::remove(&project_roots(c), &p.paths, &c.bg_cancel)?;
+            Ok(json!({ "removed": removed, "refused": refused }))
+        }
+        "growth" => {
+            #[derive(Deserialize)]
+            struct P { #[serde(default)] force: bool }
+            let p: P = serde_json::from_value(params).unwrap_or(P { force: false });
+            if c.growth_busy.swap(true, Ordering::SeqCst) {
+                return Err("une mesure est déjà en cours".into());
+            }
+            let _b = Busy(&c.growth_busy);
+            growth::check(&c.store, p.force, &c.bg_cancel).map(|r| json!(r))
+        }
+        "dupes" => {
+            #[derive(Deserialize)]
+            struct P { paths: Vec<String> }
+            let p: P = serde_json::from_value(params).map_err(|e| e.to_string())?;
+            let roots: Vec<PathBuf> = p.paths.iter().map(PathBuf::from).collect();
+            if roots.is_empty() || !roots.iter().all(|r| fsutil::path_without_reparse(r) && r.is_dir()) {
+                return Err("dossier invalide".into());
+            }
+            if roots.iter().any(|r| dupes::excluded(r)) {
+                return Err("dossier exclu : les données d’applis, dossiers cachés et dossiers de compilation ne sont pas comparés".into());
+            }
+            if c.dupes_busy.swap(true, Ordering::SeqCst) {
+                return Err("une recherche de doublons est déjà en cours".into());
+            }
+            let _b = Busy(&c.dupes_busy);
+            c.dupes_cancel.store(false, Ordering::SeqCst);
+            let progress = |done: usize, total: usize, label: &str| c.event("progress", json!({ "phase": "dupes", "done": done, "total": total, "label": label }));
+            let r = dupes::find(&roots, &c.dupes_cancel, &progress);
+            if c.dupes_cancel.load(Ordering::SeqCst) {
+                return Err("analyse annulée".into());
+            }
+            Ok(json!(r))
+        }
+        "dupes.trash" => {
+            #[derive(Deserialize)]
+            struct P { pairs: Vec<dupes::Pair> }
+            let p: P = serde_json::from_value(params).map_err(|e| e.to_string())?;
+            let _b = take_busy(c)?;
+            Ok(json!(dupes::trash(&p.pairs)))
+        }
         "apps.leftovers" => apps::leftovers(),
         "apps.trashLeftovers" => {
             #[derive(Deserialize)]
@@ -201,6 +262,11 @@ fn handle(c: &Core, method: &str, params: Value) -> Result<Value, String> {
         }
         _ => Err(format!("méthode inconnue : {method}")),
     }
+}
+
+/// Racines de projets des réglages : là où vivent les dépôts git.
+fn project_roots(c: &Core) -> Vec<PathBuf> {
+    c.store.settings().project_roots.iter().filter_map(|r| fsutil::expand_env(r)).collect()
 }
 
 fn arg(args: &[String], name: &str) -> Option<String> {
@@ -221,6 +287,10 @@ fn main() {
         busy: AtomicBool::new(false),
         space_busy: AtomicBool::new(false),
         space_cancel: AtomicBool::new(false),
+        dupes_busy: AtomicBool::new(false),
+        dupes_cancel: AtomicBool::new(false),
+        growth_busy: AtomicBool::new(false),
+        bg_cancel: AtomicBool::new(false),
         out: Mutex::new(std::io::stdout()),
     });
     core.event("ready", json!({ "version": env!("CARGO_PKG_VERSION") }));
@@ -249,4 +319,6 @@ fn main() {
     // stdin closed: Electron is gone. Stop any running work and leave.
     core.cancel.store(true, Ordering::SeqCst);
     core.space_cancel.store(true, Ordering::SeqCst);
+    core.dupes_cancel.store(true, Ordering::SeqCst);
+    core.bg_cancel.store(true, Ordering::SeqCst);
 }

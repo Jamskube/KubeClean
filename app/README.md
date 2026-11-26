@@ -74,6 +74,14 @@ La page Espace disque (`Space.svelte`) cartographie le dossier personnel ou un d
 treemap « squarified » des 40 plus gros éléments, liste détaillée, fil d’Ariane. Lecture
 seule : un dossier s’ouvre d’un clic, un fichier s’affiche dans l’Explorateur ou le Finder.
 Le moteur tourne en priorité basse pour que la fenêtre reste fluide pendant ses parcours.
+« Chercher les doublons » (`Dupes.svelte`) compare le dossier affiché : rien n’est choisi
+d’office, l’utilisateur désigne la copie à garder dans chaque groupe (ou « la plus récente
+partout ») et les autres partent à la Corbeille après confirmation.
+
+En bas de Projets, `Worktrees.svelte` liste les copies de travail git : seules celles
+sans travail en cours se cochent, jamais d’office. Le tableau de bord affiche « Ça grossit
+vite » quand un dossier d’appli a fortement grossi depuis la veille. État commun de ces
+trois vues : `src/lib/extras.svelte.js`.
 
 - `npm run icon` : compose le motif sur une tuile blanche, vérifie l’absence de
   tache au centre et régénère les PNG et l’ICO (16, 24, 32, 48, 64, 128, 256 px).

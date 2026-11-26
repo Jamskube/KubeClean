@@ -274,10 +274,66 @@ const appMethods = {
   },
 };
 
+// ---------- copies git, croissance, doublons (factices : rien n'est touché) ----------
+const MP = (...parts) => (MAC_MOCK ? '/Users/nico/' : USER + SPACE_SEP) + parts.join(SPACE_SEP);
+let WORKTREES = [
+  { path: MP('Projets', 'auth-api-list-users'), repo: MP('Projets', 'auth-api'), branch: 'feat/can-grant-namespace', size: 7.1e9, changes: 0, local: [], merged: true, pushed: true, last: now - 64 * DAY, missing: false, locked: false, nests: false, removable: true },
+  { path: MP('Projets', 'vpnmgr-front'), repo: MP('Projets', 'vpnmgr'), branch: 'lisibilite', size: 31e6, changes: 0, local: [], merged: false, pushed: true, last: now - 35 * DAY, missing: false, locked: false, nests: false, removable: true },
+  { path: MP('Projets', 'IAM', '.claude', 'worktrees', 'agent-a5c0d4f1'), repo: MP('Projets', 'IAM'), branch: 'ux/coque', size: 12e6, changes: 0, local: [], merged: true, pushed: false, last: now - 17 * DAY, missing: false, locked: false, nests: false, removable: true },
+  { path: MP('AppData', 'Local', 'Temp', 'claude', 'wt-build'), repo: MP('Projets', 'RSC_Construct'), branch: 'vps-build-3d47806', size: 0, changes: 0, local: [], merged: false, pushed: false, last: 0, missing: true, locked: false, nests: false, removable: true },
+  { path: MP('Projets', 'lic-sys-wt-direct'), repo: MP('Projets', 'lic-sys'), branch: 'feat/projet-direct', size: 140e6, changes: 7, local: [], merged: true, pushed: true, last: now - 22 * DAY, missing: false, locked: false, nests: false, removable: false },
+  { path: MP('Projets', 'SNDS_Website', '.claude', 'worktrees', 'agent-visual'), repo: MP('Projets', 'SNDS_Website'), branch: 'agent/visual', size: 840e6, changes: 0, local: ['.env', 'api-server/.env'], merged: true, pushed: false, last: now - 40 * DAY, missing: false, locked: false, nests: false, removable: false },
+];
+const DUP = (dir, name, days) => ({ path: MP(...dir, name), modified: now - days * DAY });
+let DUPES = [
+  { size: 7.4e9, copies: [DUP(['Desktop', 'SoundNodes', 'data', 'negatives'], 'demand.zip', 12), DUP(['Sauvegardes', 'SoundID_AI_Audience', 'data'], 'demand.zip', 80)] },
+  { size: 1.38e9, copies: [DUP(['Videos'], 'C-News-2026-10-07.mp4', 50), DUP(['Downloads'], 'C-News-2026-10-07.mp4', 50), DUP(['Desktop', 'à trier'], 'C-News-2026-10-07 (1).mp4', 49)] },
+  { size: 412e6, copies: [DUP(['Documents', 'Formation IA', 'Moodle'], 'SQL.pdf', 300), DUP(['Documents', 'Moodle', 'SQL'], 'SQL.pdf', 300)] },
+  { size: 31e6, copies: [DUP(['Projets', 'pipeline', 'tests', 'audio'], 'Imagine - John Lennon.wav', 270), DUP(['Projets', 'FP_Pipeline', 'tests', 'audio'], 'Imagine - John Lennon.wav', 290)] },
+];
+let dupesCancelled = false;
+const extraMethods = {
+  worktrees: async () => { await scaled(1200); return WORKTREES; },
+  async 'worktrees.remove'({ paths }) {
+    if (busy) throw new Error('une analyse ou un nettoyage est déjà en cours');
+    await scaled(800);
+    const removed = paths.filter((p) => WORKTREES.some((w) => w.path === p && w.removable));
+    const refused = paths.filter((p) => !removed.includes(p)).map((p) => ({ path: p, reason: 'introuvable : actualise la liste' }));
+    WORKTREES = WORKTREES.filter((w) => !removed.includes(w.path)); // factice : rien n'est retiré
+    return { removed, refused };
+  },
+  growth: async () => {
+    await scaled(300);
+    const g = MAC_MOCK ? '/Users/nico/Library/Logs' : ['C:', 'ProgramData'].join(SPACE_SEP);
+    return { growers: [{ path: `${g}${SPACE_SEP}McAfee`, name: `${MAC_MOCK ? 'Logs' : 'ProgramData'} › McAfee`, before: 1.6e9, after: 16.1e9 }, { path: MP('AppData', 'Local', 'wsl'), name: 'Local › wsl', before: 38.2e9, after: 41.1e9 }], measuredAt: now, since: now - DAY - 3 * 3600e3 };
+  },
+  async dupes({ paths }) {
+    dupesCancelled = false;
+    send({ event: 'progress', data: { phase: 'dupes', done: 0, total: 0, label: 'Inventaire des fichiers' } });
+    await scaled(700);
+    const total = 2400;
+    for (let d = 0; d <= total; d += 200) {
+      if (dupesCancelled) throw new Error('analyse annulée');
+      send({ event: 'progress', data: { phase: 'dupes', done: d, total, label: names[(d / 200) % names.length] } });
+      await scaled(120);
+    }
+    const groups = DUPES.filter(() => paths.length);
+    return { groups, wasted: groups.reduce((a, g) => a + g.size * (g.copies.length - 1), 0), files: 18452, truncated: false };
+  },
+  async 'dupes.trash'({ pairs }) {
+    if (busy) throw new Error('une analyse ou un nettoyage est déjà en cours');
+    await scaled(600);
+    const gone = pairs.map((p) => p.remove);
+    let size = 0;
+    DUPES = DUPES.map((g) => { const left = g.copies.filter((c) => !gone.includes(c.path)); size += (g.copies.length - left.length) * g.size; return { ...g, copies: left }; }).filter((g) => g.copies.length > 1);
+    return { trashed: gone, size, left: [] }; // factice : rien n'est déplacé
+  },
+};
+
 const methods = {
   hello: async () => ({ version: '0.1.0-mock', dataDir: 'C:\\mock', drives }),
   drives: async () => drives,
-  cancel: async (p) => { if (p?.what === 'space') spaceCancelled = true; else cancelled = true; return true; },
+  cancel: async (p) => { if (p?.what === 'space') spaceCancelled = true; else if (p?.what === 'dupes') dupesCancelled = true; else cancelled = true; return true; },
   async scan() {
     if (busy) throw new Error('une analyse ou un nettoyage est déjà en cours');
     busy = true; cancelled = false;
@@ -338,6 +394,7 @@ const methods = {
   'ignore.remove': async ({ path: p }) => { settings.ignore = settings.ignore.filter((x) => x.toLowerCase() !== p.toLowerCase()); return settings; },
   history: async () => history,
   ...appMethods,
+  ...extraMethods,
 };
 
 send({ event: 'ready', data: { version: '0.1.0-mock' } });

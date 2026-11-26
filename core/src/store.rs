@@ -65,7 +65,7 @@ pub struct Store {
 }
 
 impl Store {
-    fn read<T: for<'de> Deserialize<'de> + Default>(&self, name: &str) -> T {
+    pub fn read<T: for<'de> Deserialize<'de> + Default>(&self, name: &str) -> T {
         self.dir
             .as_ref()
             .and_then(|d| std::fs::read_to_string(d.join(name)).ok())
@@ -73,7 +73,7 @@ impl Store {
             .unwrap_or_default()
     }
     /// Write through a temp file and rename, so a crash never leaves half a file.
-    fn write<T: Serialize>(&self, name: &str, v: &T) -> Result<(), String> {
+    pub fn write<T: Serialize>(&self, name: &str, v: &T) -> Result<(), String> {
         let Some(d) = &self.dir else { return Ok(()) };
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
         let tmp = d.join(format!("{name}.tmp"));

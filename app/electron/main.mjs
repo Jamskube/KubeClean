@@ -18,7 +18,7 @@ const CORE = app.isPackaged
   ? path.join(process.resourcesPath, CORE_NAME)
   : path.join(here, '..', '..', 'core', 'target', 'release', CORE_NAME);
 const ORIGIN = 'app://kubeclean';
-const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history', 'apps', 'apps.uninstall', 'apps.reset', 'startup', 'startup.set', 'updates', 'updates.install', 'space', 'apps.leftovers', 'apps.trashLeftovers']);
+const METHODS = new Set(['hello', 'drives', 'scan', 'cancel', 'items', 'clean', 'settings.get', 'settings.set', 'ignore.add', 'ignore.remove', 'history', 'apps', 'apps.uninstall', 'apps.reset', 'startup', 'startup.set', 'updates', 'updates.install', 'space', 'apps.leftovers', 'apps.trashLeftovers', 'worktrees', 'worktrees.remove', 'growth', 'dupes', 'dupes.trash']);
 
 if (!app.requestSingleInstanceLock()) app.quit(); // two engines cleaning the same disk: never
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
@@ -81,13 +81,13 @@ function call(method, params) {
 const fromApp = (e) => e.senderFrame?.url.startsWith(ORIGIN + '/');
 const isAbs = (p) => typeof p === 'string' && path.isAbsolute(p) && !p.split(/[\\/]/).includes('..');
 
-const READ_ONLY = new Set(['hello', 'drives', 'cancel', 'scan', 'items', 'settings.get', 'history', 'apps', 'startup', 'updates', 'space', 'apps.leftovers']);
+const READ_ONLY = new Set(['hello', 'drives', 'cancel', 'scan', 'items', 'settings.get', 'history', 'apps', 'startup', 'updates', 'space', 'apps.leftovers', 'worktrees', 'growth', 'dupes']);
 ipcMain.handle('core', (e, method, params) => {
   if (!fromApp(e) || !METHODS.has(method)) return { error: 'appel refusé' };
   // a folder read can block in the kernel (macOS waits on its permission prompt) and never see the
   // cancel flag: a scan changes nothing on disk, so ending the engine is safe. Never during a clean.
   if (method === 'cancel') {
-    const walk = params?.what === 'space' ? 'space' : 'scan'; // the walk this cancel targets, the other one keeps going
+    const walk = ['space', 'dupes'].includes(params?.what) ? params.what : 'scan'; // the walk this cancel targets, the others keep going
     const scans = [...methods].filter(([, m]) => m === walk).map(([id]) => id);
     setTimeout(() => {
       // tuer le moteur seulement si TOUT ce qui tourne est une lecture : une désinstallation, une mise

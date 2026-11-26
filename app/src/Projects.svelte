@@ -5,6 +5,7 @@
   import { fmt, plural, idle } from './lib/fmt.js';
   import Icon from './lib/Icon.svelte';
   import Num from './lib/ui/Num.svelte';
+  import Worktrees from './Worktrees.svelte';
 
   const INTRO_KEY = 'kubeclean:projects-intro';
   const read = (k) => { try { return sessionStorage.getItem(k) === '1'; } catch { return false; } };
@@ -132,6 +133,8 @@
 
     <p class="kc-foot">{#if checked}<Num value={checked} /> cochés sur <Num value={rule.size} />{:else}rien de coché sur <Num value={rule.size} />{/if} · {plural(projects.length, 'projet', 'projets')}</p>
   {/if}
+
+  <Worktrees />
 </div>
 
 <style>
